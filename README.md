@@ -23,7 +23,8 @@ Keep v1 installed while testing v2. Disable one export processor if both would d
 - Top-level **Mat/Frame** tab, Library toolbar button, **Ctrl+Shift+M**
 - Presets, canvas stage, crop, No mat / No frame, matte bevel, frame colors, shadows, textures, EXIF captions
 - Named templates + save/reset defaults
-- Large module preview of the selected / active photo
+- Large module preview — **one framed photo per selected image** (‹ › pages, like Print)
+- Default layout docks **Export** (right) and **Filmstrip** (bottom) with Mat/Frame settings
 - Export panel: **Apply mat/frame** + **Template**
 - Works with Print module via `api.export.renderPhotos` (processors run in the pipeline)
 

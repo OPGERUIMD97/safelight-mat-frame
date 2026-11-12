@@ -1,7 +1,8 @@
-// Safelight Mat/Frame Module v2.0.0-alpha
+// Safelight Mat/Frame Module v2.0.0-alpha.1
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
+// Multi-select = pages (‹ ›). Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 
 const STORAGE_KEY  = "safelight-mat-frame-templates";
@@ -958,7 +959,7 @@ function getProcessorFields(tpls) {
 
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.1", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1831,12 +1832,21 @@ export function activate(api) {
 
   function MatFrameModule() {
     const photos = useSelectedPhotos();
-    const photo = photos[0] || null;
+    const [pageIndex, setPageIndex] = useState(0);
+    const photoKey = photos.map(p => p.id).join("|");
+    const pageCount = Math.max(1, photos.length || 1);
+    const safePage = Math.min(pageIndex, pageCount - 1);
+    const photo = photos[safePage] || null;
+
     const [tpl, setTpl] = useState(() => resolveExportTemplate(loadTemplates()));
     const [url, setUrl] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [sourceHint, setSourceHint] = useState("");
     const urlRef = useRef(null);
     const genRef = useRef(0);
+    const ui = api.ui || {};
+
+    useEffect(() => { setPageIndex(0); }, [photoKey]);
 
     useEffect(() => {
       const id = setInterval(() => {
@@ -1850,23 +1860,32 @@ export function activate(api) {
       const gen = ++genRef.current;
       let cancelled = false;
       (async () => {
-        if (!photo || !tpl) { setUrl(null); return; }
+        if (!photo || !tpl) { setUrl(null); setSourceHint(""); return; }
         setBusy(true);
         try {
           let blob = null;
+          let hint = "";
           const exportApi = api.export;
+          // Skip export processors so we don't double-apply Mat/Frame (or Border).
           if (exportApi?.renderPhotos) {
-            const results = await exportApi.renderPhotos([photo], { format: "image/jpeg", quality: 0.85, longEdge: 1400 });
+            const results = await exportApi.renderPhotos(
+              [photo],
+              { format: "image/jpeg", quality: 0.85, longEdge: 1400 },
+              null,
+              { processors: false }
+            );
             const item = results && results[0];
             blob = item?.blob || item?.file || null;
             if (item?.url && !blob) {
               const res = await fetch(item.url);
               blob = await res.blob();
             }
+            if (blob) hint = "Develop pipeline (no processors)";
           }
           if (!blob && photo.thumbnailUrl) {
             const res = await fetch(photo.thumbnailUrl);
             blob = await res.blob();
+            hint = "Library thumbnail";
           }
           if (!blob || cancelled || gen !== genRef.current) return;
           const framed = await renderPrintMat(blob, tpl, photo, { maxLongEdge: 1400, preview: true });
@@ -1875,6 +1894,7 @@ export function activate(api) {
           if (urlRef.current) URL.revokeObjectURL(urlRef.current);
           urlRef.current = nextUrl;
           setUrl(nextUrl);
+          setSourceHint(hint);
         } catch (err) {
           console.error("[safelight-mat-frame] module preview error:", err);
         } finally {
@@ -1885,6 +1905,14 @@ export function activate(api) {
     }, [photo, tpl]);
 
     useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
+
+    const go = dir => setPageIndex(i => Math.max(0, Math.min(pageCount - 1, i + dir)));
+    const navBtn = (label, enabled, fn) => ui.Button
+      ? ce(ui.Button, { size: "sm", disabled: !enabled, onClick: fn }, label)
+      : ce("button", {
+          type: "button", disabled: !enabled, onClick: fn,
+          style: { padding: "4px 8px", fontSize: 11, opacity: enabled ? 1 : 0.4 },
+        }, label);
 
     return ce("div", {
       style: {
@@ -1899,10 +1927,16 @@ export function activate(api) {
           borderBottom: "1px solid var(--color-border-subtle, #333)", flexShrink: 0,
         },
       },
-        ce("span", { style: { fontSize: 12, fontWeight: 600 } }, "Mat/Frame"),
-        ce("span", { style: { fontSize: 11, opacity: 0.65, flex: 1 } },
-          photo ? (photo.filename || photo.id) : "Select a photo in Library or Develop"),
+        navBtn("‹", safePage > 0, () => go(-1)),
+        ce("span", { style: { fontSize: 11, opacity: 0.75 } },
+          photos.length
+            ? `Photo ${safePage + 1} of ${pageCount}`
+            : "No photos selected"),
+        navBtn("›", safePage < pageCount - 1, () => go(1)),
+        ce("span", { style: { fontSize: 11, opacity: 0.55, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          photo ? (photo.filename || photo.id) : "Select photos in Library (filmstrip)"),
         busy && ce("span", { style: { fontSize: 11, opacity: 0.55 } }, "Rendering…"),
+        !busy && sourceHint && ce("span", { style: { fontSize: 10, opacity: 0.45 } }, sourceHint),
       ),
       ce("div", {
         style: {
@@ -1915,8 +1949,10 @@ export function activate(api) {
               src: url, alt: "",
               style: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", boxShadow: "0 8px 32px #0008" },
             })
-          : ce("div", { style: { fontSize: 12, opacity: 0.55, textAlign: "center", lineHeight: 1.5 } },
-              photo ? "Building preview…" : "Select a photo to preview mat & frame.\nConfigure templates in the Mat/Frame settings panel.")
+          : ce("div", { style: { fontSize: 12, opacity: 0.55, textAlign: "center", lineHeight: 1.5, whiteSpace: "pre-line" } },
+              photo
+                ? "Building preview…"
+                : "Select one or more photos.\nEach selected photo is a page — use ‹ › or the filmstrip.")
       ),
     );
   }
@@ -1934,6 +1970,10 @@ export function activate(api) {
     return ce("button", { type: "button", onClick: go, style: { fontSize: 11, padding: "4px 8px" } }, "Mat/Frame");
   }
 
+  // Core Export + Filmstrip panel ids (builtin / stock extensions).
+  const EXPORT_PANEL_ID = "core.export";
+  const FILMSTRIP_PANEL_ID = "com.safelight.filmstrip.panel";
+
   if (typeof api.registerModule === "function") {
     api.registerModule({
       id: MODULE_ID,
@@ -1942,7 +1982,10 @@ export function activate(api) {
       order: 35,
       defaultLayout: {
         rails: [
-          { side: "right", width: 300, panels: [PANEL_ID] },
+          // Settings + Export on the right (tabbed in the same rail).
+          { side: "right", width: 300, panels: [PANEL_ID, EXPORT_PANEL_ID] },
+          // Filmstrip under the preview — same pattern as Develop.
+          { side: "bottom", height: 112, panels: [FILMSTRIP_PANEL_ID] },
         ],
       },
     });
