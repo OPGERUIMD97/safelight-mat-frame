@@ -1,8 +1,8 @@
 {
   "id": "safelight-mat-frame",
   "name": "Mat/Frame",
-  "version": "2.0.0-alpha.1",
-  "description": "Mat/Frame module (v2) — top-level tab for passe-partout & frame. Multi-select pages, default Export + Filmstrip layout. Export-first Apply + Template. No Develop overlay.",
+  "version": "2.0.0-alpha.2",
+  "description": "Mat/Frame module (v2) — multi-select pages with cached previews and ←→ keys. Default Export + Filmstrip. Export-first Apply + Template. No Develop overlay.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
   "minAppVersion": "2.6.0",

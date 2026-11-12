@@ -1,8 +1,9 @@
-// Safelight Mat/Frame Module v2.0.0-alpha.1
+// Safelight Mat/Frame Module v2.0.0-alpha.2
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
-// Multi-select = pages (‹ ›). Default layout docks Export + Filmstrip.
+// Multi-select = pages (‹ › / ← →). Cached+prefetched thumbnail frames for fast swap.
+// Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 
 const STORAGE_KEY  = "safelight-mat-frame-templates";
@@ -959,7 +960,7 @@ function getProcessorFields(tpls) {
 
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.1", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.2", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1839,74 +1840,158 @@ export function activate(api) {
     const photo = photos[safePage] || null;
 
     const [tpl, setTpl] = useState(() => resolveExportTemplate(loadTemplates()));
+    const [tplSig, setTplSig] = useState(() => JSON.stringify(resolveExportTemplate(loadTemplates()) || {}));
     const [url, setUrl] = useState(null);
     const [busy, setBusy] = useState(false);
     const [sourceHint, setSourceHint] = useState("");
-    const urlRef = useRef(null);
-    const genRef = useRef(0);
+    const cacheRef = useRef(new Map()); // key -> { url, hint }
+    const pendingRef = useRef(new Map());
+    const photosRef = useRef(photos);
+    const pageCountRef = useRef(pageCount);
     const ui = api.ui || {};
+    photosRef.current = photos;
+    pageCountRef.current = pageCount;
+
+    const PREVIEW_EDGE = 900; // lighter than export; swap stays snappy
 
     useEffect(() => { setPageIndex(0); }, [photoKey]);
 
     useEffect(() => {
       const id = setInterval(() => {
         const next = resolveExportTemplate(loadTemplates());
+        const sig = JSON.stringify(next || {});
         setTpl(prev => (prev === next || JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+        setTplSig(prev => (prev === sig ? prev : sig));
       }, 750);
       return () => clearInterval(id);
     }, []);
 
+    const clearCache = useCallback(() => {
+      for (const entry of cacheRef.current.values()) {
+        if (entry?.url) URL.revokeObjectURL(entry.url);
+      }
+      cacheRef.current.clear();
+      pendingRef.current.clear();
+    }, []);
+
+    // Template change invalidates framed previews.
     useEffect(() => {
-      const gen = ++genRef.current;
-      let cancelled = false;
-      (async () => {
-        if (!photo || !tpl) { setUrl(null); setSourceHint(""); return; }
-        setBusy(true);
-        try {
-          let blob = null;
-          let hint = "";
-          const exportApi = api.export;
-          // Skip export processors so we don't double-apply Mat/Frame (or Border).
-          if (exportApi?.renderPhotos) {
-            const results = await exportApi.renderPhotos(
-              [photo],
-              { format: "image/jpeg", quality: 0.85, longEdge: 1400 },
-              null,
-              { processors: false }
-            );
-            const item = results && results[0];
-            blob = item?.blob || item?.file || null;
-            if (item?.url && !blob) {
-              const res = await fetch(item.url);
-              blob = await res.blob();
-            }
-            if (blob) hint = "Develop pipeline (no processors)";
-          }
-          if (!blob && photo.thumbnailUrl) {
-            const res = await fetch(photo.thumbnailUrl);
-            blob = await res.blob();
-            hint = "Library thumbnail";
-          }
-          if (!blob || cancelled || gen !== genRef.current) return;
-          const framed = await renderPrintMat(blob, tpl, photo, { maxLongEdge: 1400, preview: true });
-          if (cancelled || gen !== genRef.current) return;
-          const nextUrl = URL.createObjectURL(framed);
-          if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-          urlRef.current = nextUrl;
-          setUrl(nextUrl);
-          setSourceHint(hint);
-        } catch (err) {
-          console.error("[safelight-mat-frame] module preview error:", err);
-        } finally {
-          if (!cancelled && gen === genRef.current) setBusy(false);
+      clearCache();
+      setUrl(null);
+    }, [tplSig, clearCache]);
+
+    useEffect(() => () => clearCache(), [clearCache]);
+
+    const buildFramed = useCallback(async (targetPhoto, template) => {
+      const key = `${targetPhoto.id}|${JSON.stringify(template || {})}`;
+      const hit = cacheRef.current.get(key);
+      if (hit) return hit;
+      const inflight = pendingRef.current.get(key);
+      if (inflight) return inflight;
+
+      const job = (async () => {
+        let blob = null;
+        let hint = "";
+        // Thumbnail path first — much faster for browsing a selection.
+        if (targetPhoto.thumbnailUrl) {
+          if (api.catalog?.requestThumbnail) api.catalog.requestThumbnail(targetPhoto.id);
+          const res = await fetch(targetPhoto.thumbnailUrl);
+          blob = await res.blob();
+          hint = "Library thumbnail";
         }
-      })();
+        if (!blob && api.export?.renderPhotos) {
+          const results = await api.export.renderPhotos(
+            [targetPhoto],
+            { format: "image/jpeg", quality: 0.8, longEdge: PREVIEW_EDGE },
+            null,
+            { processors: false }
+          );
+          const item = results && results[0];
+          blob = item?.blob || item?.file || null;
+          if (item?.url && !blob) blob = await (await fetch(item.url)).blob();
+          if (blob) hint = "Develop pipeline (no processors)";
+        }
+        if (!blob) throw new Error("No source pixels for preview");
+        const framed = await renderPrintMat(blob, template, targetPhoto, {
+          maxLongEdge: PREVIEW_EDGE,
+          preview: true,
+        });
+        const url = URL.createObjectURL(framed);
+        const entry = { url, hint };
+        const prev = cacheRef.current.get(key);
+        if (prev?.url && prev.url !== url) URL.revokeObjectURL(prev.url);
+        cacheRef.current.set(key, entry);
+        return entry;
+      })().finally(() => {
+        pendingRef.current.delete(key);
+      });
+
+      pendingRef.current.set(key, job);
+      return job;
+    }, []);
+
+    // Show cached frame instantly; render/prefetch around the current page.
+    useEffect(() => {
+      if (!photo || !tpl) { setUrl(null); setSourceHint(""); setBusy(false); return; }
+      const key = `${photo.id}|${tplSig}`;
+      const cached = cacheRef.current.get(key);
+      if (cached) {
+        setUrl(cached.url);
+        setSourceHint(cached.hint || "");
+        setBusy(false);
+      } else {
+        setBusy(true);
+      }
+
+      let cancelled = false;
+      buildFramed(photo, tpl).then(entry => {
+        if (cancelled) return;
+        setUrl(entry.url);
+        setSourceHint(entry.hint || "");
+        setBusy(false);
+      }).catch(err => {
+        if (!cancelled) {
+          console.error("[safelight-mat-frame] module preview error:", err);
+          setBusy(false);
+        }
+      });
+
+      // Prefetch neighbours so ‹ › feels instant.
+      const neighbors = [safePage - 1, safePage + 1, safePage + 2]
+        .filter(i => i >= 0 && i < photos.length && i !== safePage);
+      neighbors.forEach(i => {
+        const p = photos[i];
+        if (p) buildFramed(p, tpl).catch(() => {});
+      });
+
       return () => { cancelled = true; };
-    }, [photo, tpl]);
+    }, [photo, tpl, tplSig, safePage, photoKey, buildFramed]);
 
-    useEffect(() => () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); }, []);
+    const go = useCallback(dir => {
+      setPageIndex(i => Math.max(0, Math.min(pageCountRef.current - 1, i + dir)));
+    }, []);
 
-    const go = dir => setPageIndex(i => Math.max(0, Math.min(pageCount - 1, i + dir)));
+    // Arrow keys navigate the selection even with Filmstrip open (capture phase).
+    useEffect(() => {
+      const onKey = (e) => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+        const el = e.target;
+        if (el instanceof HTMLElement) {
+          const tag = el.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) return;
+        }
+        const mod = stores.useUIStore?.getState?.()?.activeModule;
+        if (mod !== MODULE_ID) return;
+        if (photosRef.current.length < 2) return;
+        e.preventDefault();
+        e.stopPropagation();
+        go(e.key === "ArrowLeft" ? -1 : 1);
+      };
+      window.addEventListener("keydown", onKey, true);
+      return () => window.removeEventListener("keydown", onKey, true);
+    }, [go]);
+
     const navBtn = (label, enabled, fn) => ui.Button
       ? ce(ui.Button, { size: "sm", disabled: !enabled, onClick: fn }, label)
       : ce("button", {
@@ -1952,7 +2037,7 @@ export function activate(api) {
           : ce("div", { style: { fontSize: 12, opacity: 0.55, textAlign: "center", lineHeight: 1.5, whiteSpace: "pre-line" } },
               photo
                 ? "Building preview…"
-                : "Select one or more photos.\nEach selected photo is a page — use ‹ › or the filmstrip.")
+                : "Select one or more photos.\nEach selected photo is a page — use ← → / ‹ › or the filmstrip.")
       ),
     );
   }
