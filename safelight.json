@@ -1,0 +1,11 @@
+{
+  "id": "safelight-mat-frame",
+  "name": "Mat/Frame",
+  "version": "2.0.0-alpha",
+  "description": "Mat/Frame module (v2) — top-level tab for passe-partout & frame design. Export-first: Apply + Template in Export/Print. No Develop-canvas overlay.",
+  "author": "OPGERUIMD97",
+  "main": "dist/index.js",
+  "minAppVersion": "2.6.0",
+  "categories": ["Export"],
+  "keywords": ["mat", "frame", "passe-partout", "print", "module"]
+}
