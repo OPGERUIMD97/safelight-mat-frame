@@ -1,11 +1,13 @@
-// Safelight Mat/Frame Module v2.0.0-alpha.4
+// Safelight Mat/Frame Module v2.0.0-alpha.5
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
 // Multi-select = pages (‹ › / ← →). Cached+prefetched thumbnail frames for fast swap.
 // Arrow keys: temporarily unbind Library photo.prev/next while Mat/Frame is active,
 // then handle ← → via registerKeybinding (works with Filmstrip open).
-// Export: process() keeps JPEG/PNG/WebP mime; processPixels() frames TIFF / 16-bit PNG.
+// Export: frames ONLY while Mat/Frame module is active, using the on-screen template.
+// No Export-panel Apply/Template toggles. Library/Develop export = unframed.
+// process() keeps JPEG/PNG/WebP mime; processPixels() frames TIFF / 16-bit PNG.
 // Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 
@@ -955,6 +957,19 @@ async function renderPrintMat(blob, template, photo, options = {}) {
 // SafeLight calls processPixels for TIFF / 16-bit PNG *before* encoding, and
 // process(blob) for JPEG/PNG/WebP *after* encoding. We must implement both and
 // avoid double-applying.
+//
+// Framing only runs while the Mat/Frame *module* is active, using the template
+// currently on screen (ACTIVE_KEY). Export from Library/Develop leaves files alone.
+let hostApi = null;
+
+function isMatFrameModuleActive() {
+  try {
+    return hostApi?.stores?.useUIStore?.getState?.()?.activeModule === MODULE_ID;
+  } catch {
+    return false;
+  }
+}
+
 function exportNeedsPixelProcessor(context) {
   const s = context?.settings;
   if (!s?.format) return false;
@@ -963,16 +978,13 @@ function exportNeedsPixelProcessor(context) {
   return false;
 }
 
-function resolveProcessorTemplate(settings) {
-  const tpls = loadTemplates();
-  return (settings?.template && tpls.find(x => x.id === settings.template))
-    || resolveExportTemplate(tpls)
-    || null;
+function onScreenTemplate() {
+  return resolveExportTemplate(loadTemplates()) || null;
 }
 
-async function applyMatFrameToBlob(blob, photo, settings, context) {
-  if (settings?.enabled === false) return blob;
-  const tpl = resolveProcessorTemplate(settings);
+async function applyMatFrameToBlob(blob, photo, _settings, context) {
+  if (!isMatFrameModuleActive()) return blob;
+  const tpl = onScreenTemplate();
   if (!tpl) return blob;
   const format = context?.settings?.format || blob?.type || "image/jpeg";
   // TIFF / 16-bit PNG already framed in processPixels — don't frame again.
@@ -988,10 +1000,10 @@ async function applyMatFrameToBlob(blob, photo, settings, context) {
   }
 }
 
-async function applyMatFrameToPixels(frame, photo, settings, context) {
-  if (settings?.enabled === false) return null; // keep prior frame
+async function applyMatFrameToPixels(frame, photo, _settings, context) {
+  if (!isMatFrameModuleActive()) return null; // keep prior frame
   if (!exportNeedsPixelProcessor(context)) return null; // JPEG/PNG/WebP use process()
-  const tpl = resolveProcessorTemplate(settings);
+  const tpl = onScreenTemplate();
   if (!tpl || !frame?.data || !frame.width || !frame.height) return null;
   try {
     const { data, width, height } = frame;
@@ -1027,33 +1039,10 @@ function matFrameProcessorHandlers() {
   };
 }
 
-// ── Export panel settings ─────────────────────────────────────────────────────
-// Shown under "Mat/Frame" in Safelight's Export panel. Apply + Template are the
-// source of truth for export/print framing (no Develop overlay in v2).
-function getProcessorFields(tpls) {
-  if (!tpls || !tpls.length) return [];
-  const active = resolveExportTemplate(tpls);
-  return [
-    {
-      key: "enabled",
-      type: "boolean",
-      label: "Apply mat/frame",
-      hint: `Active template: ${active?.name || "—"}`,
-      default: true,
-    },
-    {
-      key: "template",
-      type: "select",
-      label: "Template",
-      options: tpls.map(t => ({ value: t.id, label: t.name })),
-      default: active ? active.id : tpls[0].id,
-    },
-  ];
-}
-
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.4", "color:#C15F3C;font-weight:bold");
+  hostApi = api;
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.5", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1195,7 +1184,12 @@ export function activate(api) {
 
   function MatFramePanel() {
     const [templates, setTemplates] = useState(loadTemplates);
-    const [activeIdx, setActiveIdx] = useState(0);
+    const [activeIdx, setActiveIdx] = useState(() => {
+      const list = loadTemplates();
+      const id = loadActiveTemplateId();
+      const idx = id ? list.findIndex(t => t.id === id) : 0;
+      return idx >= 0 ? idx : 0;
+    });
     const [newName,   setNewName]   = useState("");
     const [showNew,   setShowNew]   = useState(false);
     const [activePhoto, setActivePhoto] = useState(null);
@@ -1348,7 +1342,9 @@ export function activate(api) {
       return api.registerExportProcessor({
         id: "safelight-mat-frame.processor",
         label: "Mat/Frame",
-        settings: getProcessorFields(templates),
+        // No Export-panel Apply/Template — framing uses the on-screen template
+        // only while this module is active.
+        settings: [],
         ...matFrameProcessorHandlers(),
       });
     }, [templates]);
@@ -1499,7 +1495,7 @@ export function activate(api) {
       ce("hr", { style: S.divider }),
 
       ce("div", { style: { ...S.label, fontSize: 10, marginBottom: 8, lineHeight: 1.4 } },
-        "Mat/Frame v2 is export-first: configure here, preview in this module, apply via Export (and Print). No live Develop overlay."),
+        "What you see here is what Export uses — but only while this Mat/Frame module is open. Export from Library/Develop leaves photos unframed."),
 
       ce("hr", { style: S.divider }),
 
@@ -2245,7 +2241,7 @@ export function activate(api) {
   api.registerExportProcessor({
     id: "safelight-mat-frame.processor",
     label: "Mat/Frame",
-    settings: getProcessorFields(loadTemplates()),
+    settings: [],
     ...matFrameProcessorHandlers(),
   });
 
@@ -2271,4 +2267,5 @@ export function activate(api) {
 
 export function deactivate() {
   try { restoreLibraryArrows(); } catch { /* ignore */ }
+  hostApi = null;
 }
