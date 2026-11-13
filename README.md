@@ -12,17 +12,18 @@ Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discu
 |---|---|---|
 | UI | Side panel only | **Module tab** + settings rail |
 | Develop overlay | Optional (zoom issues) | **None** |
-| Export | Apply + Template in Export panel | Only while Mat/Frame module is open (on-screen template) |
-| Print | Via export processors | Via export processors |
-| Storage keys | `safelight-print-mat-*` | `safelight-mat-frame-*` (separate) |
+| Export | Discontinued (1.3.0+) | Only while Mat/Frame module is open (on-screen template) |
+| Print | — | Via export processors |
+| Storage keys | `safelight-print-mat-*` | `safelight-mat-frame-*` (separate; can import) |
 
-If both extensions are installed, disable one export processor to avoid double-framing.
+Print Mat is discontinued — deactivate and uninstall it after switching here.
 
 ## Features
 
 - Top-level **Mat/Frame** tab, Library toolbar button, **Ctrl+Shift+M**
 - Presets, canvas stage, crop, No mat / No frame, matte bevel, frame colors, shadows, textures, EXIF captions
 - Named templates + save/reset defaults
+- **Import Print Mat** — auto-import on first run if Mat/Frame is empty; button to merge later
 - Large module preview — **one framed photo per selected image** (‹ › pages, like Print)
 - Default layout docks **Export** (right) and **Filmstrip** (bottom) with Mat/Frame settings
 - **Export while Mat/Frame is open** → uses the template on screen (no separate Apply/Template controls)
@@ -45,6 +46,10 @@ Safelight 2.6.0 or newer is required.
 1. Open the **Mat/Frame** tab (toolbar, module strip, or Ctrl+Shift+M)
 2. Select one or more photos; tweak the template in **Mat/Frame settings**
 3. Export (or print) **from this module** — framing uses what you see on screen
+
+### Migrating from Print Mat
+
+Templates use the same schema. On first launch with an empty Mat/Frame list, Print Mat templates are copied automatically from `safelight-print-mat-*`. Use **Import Print Mat** in the settings panel to merge them again later.
 
 ## License
 

@@ -1,4 +1,4 @@
-// Safelight Mat/Frame Module v2.0.0
+// Safelight Mat/Frame Module v2.0.1
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
@@ -14,6 +14,10 @@
 const STORAGE_KEY  = "safelight-mat-frame-templates";
 const DEFAULTS_KEY = "safelight-mat-frame-user-defaults";
 const ACTIVE_KEY   = "safelight-mat-frame-active-template";
+const LEGACY_STORAGE_KEY  = "safelight-print-mat-templates";
+const LEGACY_DEFAULTS_KEY = "safelight-print-mat-user-defaults";
+const LEGACY_ACTIVE_KEY   = "safelight-print-mat-active-template";
+const IMPORT_FLAG_KEY     = "safelight-mat-frame-imported-print-mat";
 const MODULE_ID = "mat-frame";
 const PANEL_ID = "safelight-mat-frame.settings";
 
@@ -356,8 +360,82 @@ const S = {
 let templatesCache = null;
 let saveTemplatesTimer = null;
 
+function readLegacyPrintMatTemplates() {
+  try {
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch (e) { return null; }
+}
+
+function cloneTemplateForImport(tpl, usedIds) {
+  const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  let id = tpl.id && !usedIds.has(String(tpl.id)) ? String(tpl.id) : `pm-${stamp}`;
+  usedIds.add(id);
+  const textFields = Array.isArray(tpl.textFields)
+    ? tpl.textFields.map((f, i) => ({ ...f, id: `${f.id || "tf"}_${stamp}_${i}` }))
+    : [];
+  // Drop Develop-overlay flag from Print Mat; Mat/Frame has no overlay.
+  const { enabled, ...rest } = tpl;
+  return { ...rest, id, textFields };
+}
+
+// Import Print Mat templates (same schema, different localStorage keys).
+// mode "auto": only when Mat/Frame has no saved list yet (once).
+// mode "merge": append legacy templates (button).
+function importPrintMatTemplates(mode = "auto") {
+  const legacy = readLegacyPrintMatTemplates();
+  if (!legacy) return { imported: 0, reason: "none" };
+
+  let existing = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) existing = JSON.parse(raw);
+  } catch (e) {}
+  const hasOwn = Array.isArray(existing) && existing.length > 0;
+
+  if (mode === "auto") {
+    try {
+      if (localStorage.getItem(IMPORT_FLAG_KEY) === "1") return { imported: 0, reason: "done" };
+    } catch (e) {}
+    if (hasOwn) {
+      try { localStorage.setItem(IMPORT_FLAG_KEY, "1"); } catch (e) {}
+      return { imported: 0, reason: "has-own" };
+    }
+  }
+
+  const usedIds = new Set(hasOwn ? existing.map(t => String(t.id)) : []);
+  const cloned = legacy.map(t => cloneTemplateForImport(t, usedIds));
+  const next = (mode === "merge" && hasOwn) ? [...existing, ...cloned] : cloned;
+  templatesCache = next;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(IMPORT_FLAG_KEY, "1");
+  } catch (e) {}
+
+  try {
+    if (!localStorage.getItem(DEFAULTS_KEY)) {
+      const d = localStorage.getItem(LEGACY_DEFAULTS_KEY);
+      if (d) localStorage.setItem(DEFAULTS_KEY, d);
+    }
+  } catch (e) {}
+
+  try {
+    const legacyActive = localStorage.getItem(LEGACY_ACTIVE_KEY);
+    if (legacyActive && next.some(t => String(t.id) === String(legacyActive))) {
+      localStorage.setItem(ACTIVE_KEY, String(legacyActive));
+    } else if (!localStorage.getItem(ACTIVE_KEY) && next[0]) {
+      localStorage.setItem(ACTIVE_KEY, String(next[0].id));
+    }
+  } catch (e) {}
+
+  return { imported: cloned.length };
+}
+
 function loadTemplates() {
   if (templatesCache) return templatesCache;
+  importPrintMatTemplates("auto");
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -1042,7 +1120,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.1", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1322,6 +1400,20 @@ export function activate(api) {
       });
     };
 
+    const importFromPrintMat = () => {
+      const result = importPrintMatTemplates("merge");
+      if (result.reason === "none" || result.imported === 0) {
+        window.alert("No Print Mat templates found in this browser profile.");
+        return;
+      }
+      const list = loadTemplates();
+      setTemplates(list);
+      const id = loadActiveTemplateId();
+      const idx = id ? list.findIndex(t => String(t.id) === String(id)) : 0;
+      setActiveIdx(idx >= 0 ? idx : 0);
+      window.alert(`Imported ${result.imported} template${result.imported === 1 ? "" : "s"} from Print Mat.`);
+    };
+
     const saveAsDefaults = () => { saveUserDefaults(t); };
     const resetToDefaults = () => {
       const def = loadUserDefaults();
@@ -1487,9 +1579,14 @@ export function activate(api) {
             }}, "Save"),
             ce("button", { style: S.btn, onClick: () => { setShowNew(false); setNewName(""); } }, "Cancel"),
           )
-        : ce("div", { style: { display: "flex", gap: 6, marginBottom: 10 } },
+        : ce("div", { style: { display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" } },
             ce("button", { style: S.btn, onClick: () => { setNewName(`Mat ${templates.length + 1}`); setShowNew(true); } }, "+ New"),
             ce("button", { style: S.btnDanger, onClick: deleteTemplate }, "Delete"),
+            ce("button", {
+              style: S.btn,
+              title: "Copy templates saved by Print Mat into Mat/Frame",
+              onClick: importFromPrintMat,
+            }, "Import Print Mat"),
           ),
 
       ce("hr", { style: S.divider }),
