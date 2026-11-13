@@ -26,6 +26,7 @@ Keep v1 installed while testing v2. Disable one export processor if both would d
 - Large module preview — **one framed photo per selected image** (‹ › pages, like Print)
 - Default layout docks **Export** (right) and **Filmstrip** (bottom) with Mat/Frame settings
 - Export panel: **Apply mat/frame** + **Template**
+- Export formats: **JPEG, PNG, WebP, and TIFF** (TIFF / 16-bit PNG via `processPixels`)
 - Works with Print module via `api.export.renderPhotos` (processors run in the pipeline)
 
 ## Installation

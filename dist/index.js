@@ -1,10 +1,11 @@
-// Safelight Mat/Frame Module v2.0.0-alpha.3
+// Safelight Mat/Frame Module v2.0.0-alpha.4
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
 // Multi-select = pages (‹ › / ← →). Cached+prefetched thumbnail frames for fast swap.
 // Arrow keys: temporarily unbind Library photo.prev/next while Mat/Frame is active,
 // then handle ← → via registerKeybinding (works with Filmstrip open).
+// Export: process() keeps JPEG/PNG/WebP mime; processPixels() frames TIFF / 16-bit PNG.
 // Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 
@@ -933,7 +934,97 @@ async function renderPrintMat(blob, template, photo, options = {}) {
   }
 
   const q = options.quality ?? (options.preview ? 0.82 : 0.95);
-  return canvas.convertToBlob({ type: "image/jpeg", quality: q });
+  // Preserve the export format. Always returning JPEG made PNG/WebP land as JPG
+  // and broke TIFF (which never reaches process() with a decodable bitmap).
+  const requested = options.preview
+    ? "image/jpeg"
+    : (options.mimeType || options.format || "image/jpeg");
+  const mime = (requested === "image/jpeg" || requested === "image/png" || requested === "image/webp")
+    ? requested
+    : "image/png";
+  try {
+    return await canvas.convertToBlob(
+      mime === "image/jpeg" || mime === "image/webp" ? { type: mime, quality: q } : { type: mime }
+    );
+  } catch (err) {
+    if (mime === "image/jpeg") throw err;
+    return canvas.convertToBlob({ type: "image/jpeg", quality: q });
+  }
+}
+
+// SafeLight calls processPixels for TIFF / 16-bit PNG *before* encoding, and
+// process(blob) for JPEG/PNG/WebP *after* encoding. We must implement both and
+// avoid double-applying.
+function exportNeedsPixelProcessor(context) {
+  const s = context?.settings;
+  if (!s?.format) return false;
+  if (s.format === "image/tiff") return true;
+  if (s.format === "image/png" && Number(s.pngBitDepth) === 16) return true;
+  return false;
+}
+
+function resolveProcessorTemplate(settings) {
+  const tpls = loadTemplates();
+  return (settings?.template && tpls.find(x => x.id === settings.template))
+    || resolveExportTemplate(tpls)
+    || null;
+}
+
+async function applyMatFrameToBlob(blob, photo, settings, context) {
+  if (settings?.enabled === false) return blob;
+  const tpl = resolveProcessorTemplate(settings);
+  if (!tpl) return blob;
+  const format = context?.settings?.format || blob?.type || "image/jpeg";
+  // TIFF / 16-bit PNG already framed in processPixels — don't frame again.
+  if (exportNeedsPixelProcessor(context)) return blob;
+  try {
+    return await renderPrintMat(blob, tpl, photo, {
+      mimeType: format,
+      quality: context?.settings?.quality,
+    });
+  } catch (err) {
+    console.error("[safelight-mat-frame] process() failed — returning unmodified export:", err);
+    return blob;
+  }
+}
+
+async function applyMatFrameToPixels(frame, photo, settings, context) {
+  if (settings?.enabled === false) return null; // keep prior frame
+  if (!exportNeedsPixelProcessor(context)) return null; // JPEG/PNG/WebP use process()
+  const tpl = resolveProcessorTemplate(settings);
+  if (!tpl || !frame?.data || !frame.width || !frame.height) return null;
+  try {
+    const { data, width, height } = frame;
+    const rgba8 = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < data.length; i++) rgba8[i] = data[i] >> 8;
+    const srcCanvas = new OffscreenCanvas(width, height);
+    srcCanvas.getContext("2d").putImageData(new ImageData(rgba8, width, height), 0, 0);
+    // PNG intermediate keeps edges clean before framing.
+    const srcBlob = await srcCanvas.convertToBlob({ type: "image/png" });
+    const framedBlob = await renderPrintMat(srcBlob, tpl, photo, { mimeType: "image/png" });
+    const framedBmp = await createImageBitmap(framedBlob);
+    const outCanvas = new OffscreenCanvas(framedBmp.width, framedBmp.height);
+    outCanvas.getContext("2d").drawImage(framedBmp, 0, 0);
+    framedBmp.close?.();
+    const out = outCanvas.getContext("2d").getImageData(0, 0, outCanvas.width, outCanvas.height);
+    const out16 = new Uint16Array(out.data.length);
+    for (let i = 0; i < out.data.length; i++) out16[i] = out.data[i] * 257;
+    return { data: out16, width: outCanvas.width, height: outCanvas.height };
+  } catch (err) {
+    console.error("[safelight-mat-frame] processPixels() failed — leaving pixels unmodified:", err);
+    return null;
+  }
+}
+
+function matFrameProcessorHandlers() {
+  return {
+    async process(blob, photo, settings, context) {
+      return applyMatFrameToBlob(blob, photo, settings, context);
+    },
+    async processPixels(frame, photo, settings, context) {
+      return applyMatFrameToPixels(frame, photo, settings, context);
+    },
+  };
 }
 
 // ── Export panel settings ─────────────────────────────────────────────────────
@@ -962,7 +1053,7 @@ function getProcessorFields(tpls) {
 
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.3", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.4", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1258,20 +1349,7 @@ export function activate(api) {
         id: "safelight-mat-frame.processor",
         label: "Mat/Frame",
         settings: getProcessorFields(templates),
-        async process(blob, photo, settings) {
-          // Export panel toggle/dropdown are the source of truth for export.
-          if (settings?.enabled === false) return blob;
-          const tpls = loadTemplates();
-          const tpl = (settings?.template && tpls.find(x => x.id === settings.template))
-            || resolveExportTemplate(tpls);
-          if (!tpl) return blob;
-          try {
-            return await renderPrintMat(blob, tpl, photo);
-          } catch (err) {
-            console.error("[safelight-mat-frame] renderPrintMat failed — returning unmodified export:", err);
-            return blob;
-          }
-        },
+        ...matFrameProcessorHandlers(),
       });
     }, [templates]);
 
@@ -2168,19 +2246,7 @@ export function activate(api) {
     id: "safelight-mat-frame.processor",
     label: "Mat/Frame",
     settings: getProcessorFields(loadTemplates()),
-    async process(blob, photo, settings) {
-      if (settings?.enabled === false) return blob;
-      const tpls = loadTemplates();
-      const tpl = (settings?.template && tpls.find(x => x.id === settings.template))
-        || resolveExportTemplate(tpls);
-      if (!tpl) return blob;
-      try {
-        return await renderPrintMat(blob, tpl, photo);
-      } catch (err) {
-        console.error("[safelight-mat-frame] renderPrintMat failed — returning unmodified export:", err);
-        return blob;
-      }
-    },
+    ...matFrameProcessorHandlers(),
   });
 
   if (typeof api.registerSlot === "function") {

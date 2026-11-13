@@ -1,8 +1,8 @@
 {
   "id": "safelight-mat-frame",
   "name": "Mat/Frame",
-  "version": "2.0.0-alpha.3",
-  "description": "Mat/Frame module (v2) — multi-select pages, cached previews, ←→ even with Filmstrip. Default Export + Filmstrip. Export-first Apply + Template.",
+  "version": "2.0.0-alpha.4",
+  "description": "Mat/Frame module (v2) — export keeps PNG/WebP/TIFF framing (not JPEG-only). Multi-select pages, ←→ with Filmstrip. Default Export + Filmstrip.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
   "minAppVersion": "2.6.0",
