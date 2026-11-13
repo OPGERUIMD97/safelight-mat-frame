@@ -1,4 +1,4 @@
-// Safelight Mat/Frame Module v2.0.0-alpha.5
+// Safelight Mat/Frame Module v2.0.0
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
@@ -1042,7 +1042,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.5", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);

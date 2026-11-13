@@ -1,4 +1,4 @@
-# Safelight Mat/Frame (v2 alpha)
+# Safelight Mat/Frame
 
 A **Mat/Frame module** for [Safelight](https://github.com/anthonyreimche/SafeLight) (v2.6+). Top-level tab (like [Print](https://github.com/OPGERUIMD97/safelight-print)) to design passe-partout and frames, then apply them on **Export** and **Print**.
 
@@ -12,11 +12,11 @@ Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discu
 |---|---|---|
 | UI | Side panel only | **Module tab** + settings rail |
 | Develop overlay | Optional (zoom issues) | **None** |
-| Export | Apply + Template | Apply + Template |
+| Export | Apply + Template in Export panel | Only while Mat/Frame module is open (on-screen template) |
 | Print | Via export processors | Via export processors |
 | Storage keys | `safelight-print-mat-*` | `safelight-mat-frame-*` (separate) |
 
-Keep v1 installed while testing v2. Disable one export processor if both would double-frame.
+If both extensions are installed, disable one export processor to avoid double-framing.
 
 ## Features
 
@@ -32,7 +32,7 @@ Keep v1 installed while testing v2. Disable one export processor if both would d
 
 ## Installation
 
-In Safelight → **View → Extensions**, load this folder or (once published):
+In Safelight → **View → Extensions**, load this folder or:
 
 ```
 OPGERUIMD97/safelight-mat-frame
@@ -43,8 +43,8 @@ Safelight 2.6.0 or newer is required.
 ## Usage
 
 1. Open the **Mat/Frame** tab (toolbar, module strip, or Ctrl+Shift+M)
-2. Select a photo; tweak templates in **Mat/Frame settings**
-3. Export with **Apply mat/frame**, or print via the Print module
+2. Select one or more photos; tweak the template in **Mat/Frame settings**
+3. Export (or print) **from this module** — framing uses what you see on screen
 
 ## License
 

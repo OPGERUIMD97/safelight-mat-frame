@@ -1,8 +1,8 @@
 {
   "id": "safelight-mat-frame",
   "name": "Mat/Frame",
-  "version": "2.0.0-alpha.5",
-  "description": "Mat/Frame module (v2) — export uses the on-screen template only while this module is open. No Export Apply toggle. Multi-select, Filmstrip, PNG/WebP/TIFF.",
+  "version": "2.0.0",
+  "description": "Mat/Frame module — export uses the on-screen template only while this module is open. Multi-select, Filmstrip, JPEG/PNG/WebP/TIFF.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
   "minAppVersion": "2.6.0",
