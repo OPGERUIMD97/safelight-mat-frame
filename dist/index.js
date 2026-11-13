@@ -1,8 +1,10 @@
-// Safelight Mat/Frame Module v2.0.0-alpha.2
+// Safelight Mat/Frame Module v2.0.0-alpha.3
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
 // Multi-select = pages (‹ › / ← →). Cached+prefetched thumbnail frames for fast swap.
+// Arrow keys: temporarily unbind Library photo.prev/next while Mat/Frame is active,
+// then handle ← → via registerKeybinding (works with Filmstrip open).
 // Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 
@@ -960,10 +962,84 @@ function getProcessorFields(tpls) {
 
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.2", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.0.0-alpha.3", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
+
+  // Wired from MatFrameModule — keybinding handlers call this.
+  const matNavRef = { current: null };
+  // Soft-unbind snapshot for Library photo.prev / photo.next while we own ← →.
+  let arrowOverrideSaved = null;
+
+  function isMatFrameActive() {
+    try {
+      return stores.useUIStore?.getState?.()?.activeModule === MODULE_ID;
+    } catch {
+      return false;
+    }
+  }
+
+  function softUnbindLibraryArrows() {
+    const kb = stores.useKeybindings;
+    if (!kb?.getState || !kb?.setState || arrowOverrideSaved) return;
+    const overrides = { ...(kb.getState().overrides || {}) };
+    arrowOverrideSaved = {
+      hadPrev: Object.prototype.hasOwnProperty.call(overrides, "photo.prev"),
+      hadNext: Object.prototype.hasOwnProperty.call(overrides, "photo.next"),
+      prev: overrides["photo.prev"],
+      next: overrides["photo.next"],
+    };
+    // Empty combo = unbound (Xi never emits ""), so fL ignores ← →.
+    overrides["photo.prev"] = "";
+    overrides["photo.next"] = "";
+    kb.setState({ overrides });
+  }
+
+  function restoreLibraryArrows() {
+    const kb = stores.useKeybindings;
+    if (!kb?.getState || !kb?.setState || !arrowOverrideSaved) return;
+    const overrides = { ...(kb.getState().overrides || {}) };
+    if (arrowOverrideSaved.hadPrev) overrides["photo.prev"] = arrowOverrideSaved.prev;
+    else delete overrides["photo.prev"];
+    if (arrowOverrideSaved.hadNext) overrides["photo.next"] = arrowOverrideSaved.next;
+    else delete overrides["photo.next"];
+    kb.setState({ overrides });
+    arrowOverrideSaved = null;
+  }
+
+  // Own ← → while Mat/Frame is the active module (Filmstrip stays open).
+  if (stores.useUIStore?.subscribe) {
+    const syncArrows = () => {
+      if (isMatFrameActive()) softUnbindLibraryArrows();
+      else restoreLibraryArrows();
+    };
+    syncArrows();
+    stores.useUIStore.subscribe(syncArrows);
+  }
+
+  if (typeof api.registerKeybinding === "function") {
+    api.registerKeybinding({
+      id: "safelight-mat-frame.prev",
+      label: "Previous photo in Mat/Frame selection",
+      category: "General",
+      defaultCombo: "ArrowLeft",
+      handler: () => {
+        if (!isMatFrameActive()) return;
+        matNavRef.current?.(-1);
+      },
+    });
+    api.registerKeybinding({
+      id: "safelight-mat-frame.next",
+      label: "Next photo in Mat/Frame selection",
+      category: "General",
+      defaultCombo: "ArrowRight",
+      handler: () => {
+        if (!isMatFrameActive()) return;
+        matNavRef.current?.(1);
+      },
+    });
+  }
 
   // Inline SVG icons (instead of emoji) so they render consistently across
   // platforms and pick up the panel's theme color via currentColor.
@@ -1968,28 +2044,25 @@ export function activate(api) {
     }, [photo, tpl, tplSig, safePage, photoKey, buildFramed]);
 
     const go = useCallback(dir => {
-      setPageIndex(i => Math.max(0, Math.min(pageCountRef.current - 1, i + dir)));
+      setPageIndex(i => {
+        const next = Math.max(0, Math.min(pageCountRef.current - 1, i + dir));
+        const p = photosRef.current[next];
+        // Keep filmstrip highlight in sync without collapsing the multi-select.
+        try {
+          const cat = stores.useCatalogStore?.getState?.();
+          if (p && cat?.setActivePhoto) cat.setActivePhoto(p.id);
+        } catch { /* ignore */ }
+        return next;
+      });
     }, []);
 
-    // Arrow keys navigate the selection even with Filmstrip open (capture phase).
+    // Keybindings (activate) call matNavRef — only when 2+ photos are selected.
     useEffect(() => {
-      const onKey = (e) => {
-        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-        const el = e.target;
-        if (el instanceof HTMLElement) {
-          const tag = el.tagName;
-          if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) return;
-        }
-        const mod = stores.useUIStore?.getState?.()?.activeModule;
-        if (mod !== MODULE_ID) return;
+      matNavRef.current = (dir) => {
         if (photosRef.current.length < 2) return;
-        e.preventDefault();
-        e.stopPropagation();
-        go(e.key === "ArrowLeft" ? -1 : 1);
+        go(dir);
       };
-      window.addEventListener("keydown", onKey, true);
-      return () => window.removeEventListener("keydown", onKey, true);
+      return () => { if (matNavRef.current) matNavRef.current = null; };
     }, [go]);
 
     const navBtn = (label, enabled, fn) => ui.Button
@@ -2130,4 +2203,6 @@ export function activate(api) {
   }
 }
 
-export function deactivate() {}
+export function deactivate() {
+  try { restoreLibraryArrows(); } catch { /* ignore */ }
+}
