@@ -1,52 +1,32 @@
-# Safelight Mat/Frame
+# Safelight Framing / Border
 
-A **Mat/Frame module** for [Safelight](https://github.com/anthonyreimche/SafeLight) (v2.6+). Top-level tab (like [Print](https://github.com/OPGERUIMD97/safelight-print)) to design passe-partout and frames, then apply them on **Export** and **Print**.
+A **Framing / Border** module for [Safelight](https://github.com/anthonyreimche/SafeLight) (v2.6+). Top-level tab (like [Print](https://github.com/OPGERUIMD97/safelight-print)) with two modes:
 
-This is the **v2 architecture** for framing: export-first, no live Develop-canvas overlay (that fought SafeLight zoom/pan in Print Mat v1).
+- **Framing** — passe-partout, frame, canvas, crop, shadows, textures, EXIF captions  
+- **Border** — solid-color border in pixels around the photo (nothing cropped)
+
+Export/print uses the **on-screen** template only while this module is open. Export from Library/Develop leaves photos unchanged.
 
 Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discussions/142) (`registerModule`).
 
-## vs Print Mat v1
+## Replaces
 
-| | Print Mat (`safelight-print-mat`) | Mat/Frame v2 (this) |
-|---|---|---|
-| UI | Side panel only | **Module tab** + settings rail |
-| Develop overlay | Optional (zoom issues) | **None** |
-| Export | Discontinued (1.3.0+) | Only while Mat/Frame module is open (on-screen template) |
-| Print | — | Via export processors |
-| Storage keys | `safelight-print-mat-*` | `safelight-mat-frame-*` (separate; can import) |
+| Old extension | Status |
+|---|---|
+| [Print Mat](https://github.com/OPGERUIMD97/safelight-print-mat) | Discontinued — deactivate & uninstall |
+| [Border](https://github.com/OPGERUIMD97/safelight-border) | Discontinued — deactivate & uninstall |
 
-Print Mat is discontinued — deactivate and uninstall it after switching here.
-
-## Dev build (local test)
-
-Branch `mat-frame-2.1.0-border` ships **2.1.0-dev** (Framing · Border). There is **no GitHub Release** for this yet — SafeLight will not offer it as an official update.
-
-To test: Safelight → **View → Extensions** → load this folder:
-
-```
-/Users/ronaldhoogland/workspaces_cursor.nosync/safelight-mat-frame
-```
-
-(or your clone path). Prefer the local folder over the GitHub install while testing.
+Use **Import Print Mat** / **Import Border** in this module to migrate templates.
 
 ## Features
 
-- Top-level **Mat/Frame** tab, Library toolbar button, **Ctrl+Shift+M**
-- Modes: **Framing** (mat/frame toolkit) · **Border** (solid px border)
-- Presets, canvas stage, crop, No mat / No frame, matte bevel, frame colors, shadows, textures, EXIF captions
-- Named templates + save/reset defaults
-- **Import Print Mat** / **Import Border** — migrate templates from the old extensions
-- Large module preview — **one framed photo per selected image** (‹ › pages, like Print)
-- Default layout docks **Export** (right) and **Filmstrip** (bottom) with Mat/Frame settings
-- **Export while Mat/Frame is open** → uses the template on screen (no separate Apply/Template controls)
-- **Export from Library/Develop** → no mat/frame (module must be active)
+- Top-level **Framing / Border** tab, Library toolbar button, **Ctrl+Shift+M**
+- Modes: **Framing** · **Border**
+- Multi-select pages (‹ › / ← →), Filmstrip + Export docked by default
+- Export panel shows the active choice, e.g. `Framing: Classic Mat` or `Border: White subtle`
 - Formats: **JPEG, PNG, WebP, TIFF**
-- Works with Print when you export/print from this module
 
 ## Installation
-
-In Safelight → **View → Extensions**, load this folder or:
 
 ```
 OPGERUIMD97/safelight-mat-frame
@@ -56,13 +36,9 @@ Safelight 2.6.0 or newer is required.
 
 ## Usage
 
-1. Open the **Mat/Frame** tab (toolbar, module strip, or Ctrl+Shift+M)
-2. Select one or more photos; tweak the template in **Mat/Frame settings**
-3. Export (or print) **from this module** — framing uses what you see on screen
-
-### Migrating from Print Mat
-
-Templates use the same schema. On first launch with an empty Mat/Frame list, Print Mat templates are copied automatically from `safelight-print-mat-*`. Use **Import Print Mat** in the settings panel to merge them again later.
+1. Open **Framing / Border**
+2. Pick **Framing** or **Border**, select a template, tweak settings
+3. Export (or print) **from this module**
 
 ## License
 

@@ -1,11 +1,11 @@
-// Safelight Mat/Frame Module v2.1.0-dev
-// Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
+// Safelight Framing / Border Module v2.1.0
+// Top-level Framing / Border tab (registerModule) — export-first framing + solid border.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
 // Multi-select = pages (‹ › / ← →). Cached+prefetched thumbnail frames for fast swap.
-// Arrow keys: temporarily unbind Library photo.prev/next while Mat/Frame is active,
+// Arrow keys: temporarily unbind Library photo.prev/next while Framing / Border is active,
 // then handle ← → via registerKeybinding (works with Filmstrip open).
-// Export: frames ONLY while Mat/Frame module is active, using the on-screen template.
+// Export: frames/borders ONLY while Framing / Border module is active, using the on-screen template.
 // No Export-panel Apply/Template toggles. Library/Develop export = unframed.
 // process() keeps JPEG/PNG/WebP mime; processPixels() frames TIFF / 16-bit PNG.
 // Default layout docks Export + Filmstrip.
@@ -385,13 +385,13 @@ function cloneTemplateForImport(tpl, usedIds) {
   const textFields = Array.isArray(tpl.textFields)
     ? tpl.textFields.map((f, i) => ({ ...f, id: `${f.id || "tf"}_${stamp}_${i}` }))
     : [];
-  // Drop Develop-overlay flag from Print Mat; Mat/Frame has no overlay.
+  // Drop Develop-overlay flag from Print Mat; Framing / Border has no Develop overlay.
   const { enabled, ...rest } = tpl;
   return { ...rest, id, textFields };
 }
 
 // Import Print Mat templates (same schema, different localStorage keys).
-// mode "auto": only when Mat/Frame has no saved list yet (once).
+// mode "auto": only when Framing has no saved list yet (once).
 // mode "merge": append legacy templates (button).
 function importPrintMatTemplates(mode = "auto") {
   const legacy = readLegacyPrintMatTemplates();
@@ -1307,7 +1307,7 @@ async function renderPrintMat(blob, template, photo, options = {}) {
 // process(blob) for JPEG/PNG/WebP *after* encoding. We must implement both and
 // avoid double-applying.
 //
-// Framing only runs while the Mat/Frame *module* is active, using the template
+// Framing/border only runs while the Framing / Border *module* is active, using the template
 // currently on screen (ACTIVE_KEY). Export from Library/Develop leaves files alone.
 let hostApi = null;
 
@@ -1380,6 +1380,37 @@ async function applyMatFrameToPixels(frame, photo, _settings, context) {
   }
 }
 
+function exportStatusLabel() {
+  const mode = loadUiMode();
+  const tpl = onScreenTemplate();
+  const name = (tpl && tpl.name) ? String(tpl.name) : "—";
+  return mode === "border" ? `Border: ${name}` : `Framing: ${name}`;
+}
+
+function getExportStatusFields() {
+  const mode = loadUiMode();
+  const tpl = onScreenTemplate();
+  const id = tpl?.id ? String(tpl.id) : "none";
+  const active = isMatFrameModuleActive();
+  return [
+    {
+      key: "onScreen",
+      type: "select",
+      // Export panel shows e.g. "Framing: Classic Mat" or "Border: White subtle"
+      label: exportStatusLabel(),
+      options: [
+        {
+          value: id,
+          label: active
+            ? "Applies when exporting from this module"
+            : "Open Framing / Border module to apply",
+        },
+      ],
+      default: id,
+    },
+  ];
+}
+
 function matFrameProcessorHandlers() {
   return {
     async process(blob, photo, settings, context) {
@@ -1394,7 +1425,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.1.0-dev", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.1.0", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1440,7 +1471,7 @@ export function activate(api) {
     arrowOverrideSaved = null;
   }
 
-  // Own ← → while Mat/Frame is the active module (Filmstrip stays open).
+  // Own ← → while Framing / Border is the active module (Filmstrip stays open).
   if (stores.useUIStore?.subscribe) {
     const syncArrows = () => {
       if (isMatFrameActive()) softUnbindLibraryArrows();
@@ -1453,7 +1484,7 @@ export function activate(api) {
   if (typeof api.registerKeybinding === "function") {
     api.registerKeybinding({
       id: "safelight-mat-frame.prev",
-      label: "Previous photo in Mat/Frame selection",
+      label: "Previous photo in Framing / Border selection",
       category: "General",
       defaultCombo: "ArrowLeft",
       handler: () => {
@@ -1463,7 +1494,7 @@ export function activate(api) {
     });
     api.registerKeybinding({
       id: "safelight-mat-frame.next",
-      label: "Next photo in Mat/Frame selection",
+      label: "Next photo in Framing / Border selection",
       category: "General",
       defaultCombo: "ArrowRight",
       handler: () => {
@@ -1672,8 +1703,8 @@ export function activate(api) {
     useEffect(() => {
       return api.registerExportProcessor({
         id: "safelight-mat-frame.processor",
-        label: "Mat/Frame",
-        settings: [],
+        label: "Framing / Border",
+        settings: getExportStatusFields(),
         ...matFrameProcessorHandlers(),
       });
     }, [templates]);
@@ -2037,10 +2068,9 @@ export function activate(api) {
     useEffect(() => {
       return api.registerExportProcessor({
         id: "safelight-mat-frame.processor",
-        label: "Mat/Frame",
-        // No Export-panel Apply/Template — framing uses the on-screen template
-        // only while this module is active.
-        settings: [],
+        label: "Framing / Border",
+        // Show on-screen Framing:… or Border:… — no Apply toggle.
+        settings: getExportStatusFields(),
         ...matFrameProcessorHandlers(),
       });
     }, [templates]);
@@ -2188,7 +2218,7 @@ export function activate(api) {
             ce("button", { style: S.btnDanger, onClick: deleteTemplate }, "Delete"),
             ce("button", {
               style: S.btn,
-              title: "Copy templates saved by Print Mat into Mat/Frame",
+              title: "Copy templates saved by Print Mat into Framing",
               onClick: importFromPrintMat,
             }, "Import Print Mat"),
           ),
@@ -2196,7 +2226,7 @@ export function activate(api) {
       ce("hr", { style: S.divider }),
 
       ce("div", { style: { ...S.label, fontSize: 10, marginBottom: 8, lineHeight: 1.4 } },
-        "What you see here is what Export uses — but only while this Mat/Frame module is open. Export from Library/Develop leaves photos unframed."),
+        "What you see here is what Export uses — but only while this Framing / Border module is open. Export from Library/Develop leaves photos unchanged."),
 
       ce("hr", { style: S.divider }),
 
@@ -2900,9 +2930,9 @@ export function activate(api) {
     };
     const ui = api.ui || {};
     if (ui.Button) {
-      return ce(ui.Button, { size: "sm", onClick: go, title: "Open Mat/Frame module" }, "Mat/Frame");
+      return ce(ui.Button, { size: "sm", onClick: go, title: "Open Framing / Border module" }, "Framing / Border");
     }
-    return ce("button", { type: "button", onClick: go, style: { fontSize: 11, padding: "4px 8px" } }, "Mat/Frame");
+    return ce("button", { type: "button", onClick: go, style: { fontSize: 11, padding: "4px 8px" } }, "Framing / Border");
   }
 
   // Core Export + Filmstrip panel ids (builtin / stock extensions).
@@ -2912,7 +2942,7 @@ export function activate(api) {
   if (typeof api.registerModule === "function") {
     api.registerModule({
       id: MODULE_ID,
-      label: "Mat/Frame",
+      label: "Framing / Border",
       component: MatFrameModule,
       order: 35,
       defaultLayout: {
@@ -2928,7 +2958,7 @@ export function activate(api) {
 
   api.registerPanel({
     id: PANEL_ID,
-    title: "Mat/Frame settings",
+    title: "Framing / Border",
     component: MatFramePanel,
     fill: true,
     defaultDock: {
@@ -2943,8 +2973,8 @@ export function activate(api) {
   // isn't mounted (panel effect also re-registers with live template list).
   api.registerExportProcessor({
     id: "safelight-mat-frame.processor",
-    label: "Mat/Frame",
-    settings: [],
+    label: "Framing / Border",
+    settings: getExportStatusFields(),
     ...matFrameProcessorHandlers(),
   });
 
@@ -2960,7 +2990,7 @@ export function activate(api) {
   if (typeof api.registerKeybinding === "function" && api.navigation) {
     api.registerKeybinding({
       id: "safelight-mat-frame.open",
-      label: "Switch to Mat/Frame module",
+      label: "Switch to Framing / Border module",
       category: "General",
       defaultCombo: "Ctrl+Shift+M",
       handler: () => api.navigation.goTo(MODULE_ID),
