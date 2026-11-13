@@ -1,4 +1,4 @@
-// Safelight Mat/Frame Module v2.0.1
+// Safelight Mat/Frame Module v2.1.0-dev
 // Top-level Mat/Frame tab (registerModule) — export-first framing toolkit.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
@@ -10,6 +10,7 @@
 // process() keeps JPEG/PNG/WebP mime; processPixels() frames TIFF / 16-bit PNG.
 // Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
+// Modes: Framing (mat/frame toolkit) · Border (solid px border, from safelight-border).
 
 const STORAGE_KEY  = "safelight-mat-frame-templates";
 const DEFAULTS_KEY = "safelight-mat-frame-user-defaults";
@@ -18,6 +19,14 @@ const LEGACY_STORAGE_KEY  = "safelight-print-mat-templates";
 const LEGACY_DEFAULTS_KEY = "safelight-print-mat-user-defaults";
 const LEGACY_ACTIVE_KEY   = "safelight-print-mat-active-template";
 const IMPORT_FLAG_KEY     = "safelight-mat-frame-imported-print-mat";
+const BORDER_STORAGE_KEY  = "safelight-mat-frame-border-templates";
+const BORDER_DEFAULTS_KEY = "safelight-mat-frame-border-user-defaults";
+const BORDER_ACTIVE_KEY   = "safelight-mat-frame-border-active-template";
+const BORDER_LEGACY_STORAGE_KEY  = "safelight-border-templates";
+const BORDER_LEGACY_DEFAULTS_KEY = "safelight-border-user-defaults";
+const BORDER_LEGACY_ACTIVE_KEY   = "safelight-border-active-template";
+const BORDER_IMPORT_FLAG_KEY     = "safelight-mat-frame-imported-border";
+const UI_MODE_KEY = "safelight-mat-frame-ui-mode"; // "framing" | "border"
 const MODULE_ID = "mat-frame";
 const PANEL_ID = "safelight-mat-frame.settings";
 
@@ -477,6 +486,268 @@ function saveActiveTemplateId(id) {
 function resolveExportTemplate(templates) {
   const activeId = loadActiveTemplateId();
   return (activeId && templates.find(t => t.id === activeId)) || templates[0];
+}
+
+// ── UI mode (Framing · Border) ────────────────────────────────────────────────
+function loadUiMode() {
+  try {
+    const m = localStorage.getItem(UI_MODE_KEY);
+    if (m === "border" || m === "framing") return m;
+  } catch (e) {}
+  return "framing";
+}
+function saveUiMode(mode) {
+  try { localStorage.setItem(UI_MODE_KEY, mode === "border" ? "border" : "framing"); } catch (e) {}
+}
+
+// ── Border mode (solid px border — same idea as safelight-border) ─────────────
+function freshBorderTemplate() {
+  return {
+    id: "default",
+    name: "White subtle",
+    mode: "border",
+    color: "#ffffff",
+    linked: true,
+    top: 20,
+    right: 20,
+    bottom: 20,
+    left: 20,
+  };
+}
+function clampPx(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(500, Math.round(n)));
+}
+function cssColor(value, fallback = "#ffffff") {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+function normalizeBorderTemplate(raw) {
+  const base = freshBorderTemplate();
+  const t = raw && typeof raw === "object" ? raw : {};
+  const name = typeof t.name === "string" ? t.name.trim() : "";
+  return {
+    id: t.id ? String(t.id) : base.id,
+    name: name || base.name,
+    mode: "border",
+    color: cssColor(t.color, base.color),
+    linked: t.linked !== false,
+    top: clampPx(t.top ?? base.top),
+    right: clampPx(t.right ?? base.right),
+    bottom: clampPx(t.bottom ?? base.bottom),
+    left: clampPx(t.left ?? base.left),
+  };
+}
+
+let borderTemplatesCache = null;
+let saveBorderTemplatesTimer = null;
+
+function loadBorderTemplates() {
+  if (borderTemplatesCache) return borderTemplatesCache;
+  importBorderTemplates("auto");
+  try {
+    const raw = localStorage.getItem(BORDER_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        borderTemplatesCache = parsed.map(normalizeBorderTemplate);
+        return borderTemplatesCache;
+      }
+    }
+  } catch (e) {}
+  borderTemplatesCache = [freshBorderTemplate()];
+  return borderTemplatesCache;
+}
+function saveBorderTemplates(t) {
+  borderTemplatesCache = t.map(normalizeBorderTemplate);
+  if (saveBorderTemplatesTimer) clearTimeout(saveBorderTemplatesTimer);
+  saveBorderTemplatesTimer = setTimeout(() => {
+    try { localStorage.setItem(BORDER_STORAGE_KEY, JSON.stringify(borderTemplatesCache)); } catch (e) {}
+  }, 180);
+}
+function loadBorderUserDefaults() {
+  try {
+    const raw = localStorage.getItem(BORDER_DEFAULTS_KEY);
+    if (raw) return normalizeBorderTemplate({ ...JSON.parse(raw), id: "tmp", name: "tmp" });
+  } catch (e) {}
+  return null;
+}
+function saveBorderUserDefaults(template) {
+  try {
+    const { id, name, ...rest } = normalizeBorderTemplate(template);
+    localStorage.setItem(BORDER_DEFAULTS_KEY, JSON.stringify(rest));
+  } catch (e) {}
+}
+function loadBorderActiveTemplateId() {
+  try { return localStorage.getItem(BORDER_ACTIVE_KEY) || null; } catch (e) { return null; }
+}
+function saveBorderActiveTemplateId(id) {
+  try { localStorage.setItem(BORDER_ACTIVE_KEY, id); } catch (e) {}
+}
+function resolveBorderExportTemplate(templates) {
+  const activeId = loadBorderActiveTemplateId();
+  return (activeId && templates.find(t => String(t.id) === String(activeId))) || templates[0];
+}
+
+function readLegacyBorderTemplates() {
+  try {
+    const raw = localStorage.getItem(BORDER_LEGACY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch (e) { return null; }
+}
+
+function importBorderTemplates(mode = "auto") {
+  const legacy = readLegacyBorderTemplates();
+  if (!legacy) return { imported: 0, reason: "none" };
+
+  let existing = null;
+  try {
+    const raw = localStorage.getItem(BORDER_STORAGE_KEY);
+    if (raw) existing = JSON.parse(raw);
+  } catch (e) {}
+  const hasOwn = Array.isArray(existing) && existing.length > 0;
+
+  if (mode === "auto") {
+    try {
+      if (localStorage.getItem(BORDER_IMPORT_FLAG_KEY) === "1") return { imported: 0, reason: "done" };
+    } catch (e) {}
+    if (hasOwn) {
+      try { localStorage.setItem(BORDER_IMPORT_FLAG_KEY, "1"); } catch (e) {}
+      return { imported: 0, reason: "has-own" };
+    }
+  }
+
+  const usedIds = new Set(hasOwn ? existing.map(t => String(t.id)) : []);
+  const cloned = legacy.map((t) => {
+    const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    let id = t.id && !usedIds.has(String(t.id)) ? String(t.id) : `bd-${stamp}`;
+    usedIds.add(id);
+    return normalizeBorderTemplate({ ...t, id, name: t.name || "Border" });
+  });
+  const next = (mode === "merge" && hasOwn)
+    ? [...existing.map(normalizeBorderTemplate), ...cloned]
+    : cloned;
+  borderTemplatesCache = next;
+  try {
+    localStorage.setItem(BORDER_STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(BORDER_IMPORT_FLAG_KEY, "1");
+  } catch (e) {}
+
+  try {
+    if (!localStorage.getItem(BORDER_DEFAULTS_KEY)) {
+      const d = localStorage.getItem(BORDER_LEGACY_DEFAULTS_KEY);
+      if (d) localStorage.setItem(BORDER_DEFAULTS_KEY, d);
+    }
+  } catch (e) {}
+
+  try {
+    const legacyActive = localStorage.getItem(BORDER_LEGACY_ACTIVE_KEY);
+    if (legacyActive && next.some(t => String(t.id) === String(legacyActive))) {
+      localStorage.setItem(BORDER_ACTIVE_KEY, String(legacyActive));
+    } else if (!localStorage.getItem(BORDER_ACTIVE_KEY) && next[0]) {
+      localStorage.setItem(BORDER_ACTIVE_KEY, String(next[0].id));
+    }
+  } catch (e) {}
+
+  return { imported: cloned.length };
+}
+
+// Solid border outside the photo (px). referenceWidth/Height scale preview
+// thumbnails so a 20px export border stays proportionally thin on screen.
+async function applyBorder(source, template, options = {}) {
+  const tpl = normalizeBorderTemplate(template || freshBorderTemplate());
+  const color = cssColor(tpl.color);
+  let top = clampPx(tpl.top);
+  let right = clampPx(tpl.right);
+  let bottom = clampPx(tpl.bottom);
+  let left = clampPx(tpl.left);
+  if (!top && !right && !bottom && !left) {
+    return source instanceof Blob ? source : source;
+  }
+
+  const bitmap = (typeof ImageBitmap !== "undefined" && source instanceof ImageBitmap)
+    ? source
+    : await createImageBitmap(source);
+
+  try {
+    const srcW = bitmap.width;
+    const srcH = bitmap.height;
+    if (!srcW || !srcH) {
+      throw new Error(`[safelight-mat-frame] Border: photo failed to decode (${srcW}x${srcH}).`);
+    }
+
+    let scaleX = 1;
+    let scaleY = 1;
+    const refW = Number(options.referenceWidth);
+    const refH = Number(options.referenceHeight);
+    if (refW > srcW) scaleX = srcW / refW;
+    if (refH > srcH) scaleY = srcH / refH;
+
+    let dw = srcW;
+    let dh = srcH;
+    const maxLong = options.maxLongEdge;
+    if (maxLong && Math.max(srcW, srcH) > maxLong) {
+      const s = maxLong / Math.max(srcW, srcH);
+      dw = Math.max(1, Math.round(srcW * s));
+      dh = Math.max(1, Math.round(srcH * s));
+      scaleX *= dw / srcW;
+      scaleY *= dh / srcH;
+    }
+
+    const scaleSide = (px, scale) => {
+      const n = Math.round(px * scale);
+      if (options.preview && px > 0 && n < 1) return 1;
+      return n;
+    };
+    top = scaleSide(top, scaleY);
+    bottom = scaleSide(bottom, scaleY);
+    left = scaleSide(left, scaleX);
+    right = scaleSide(right, scaleX);
+
+    const W = dw + left + right;
+    const H = dh + top + bottom;
+    const canvas = new OffscreenCanvas(W, H);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("[safelight-mat-frame] Border: 2D canvas unavailable.");
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(bitmap, left, top, dw, dh);
+
+    const q = options.quality ?? (options.preview ? 0.82 : 0.95);
+    const requested = options.preview
+      ? "image/jpeg"
+      : (options.mimeType || options.format || (source && source.type) || "image/jpeg");
+    const mime = (requested === "image/jpeg" || requested === "image/png" || requested === "image/webp")
+      ? requested
+      : "image/png";
+    try {
+      return await canvas.convertToBlob(
+        mime === "image/jpeg" || mime === "image/webp" ? { type: mime, quality: q } : { type: mime }
+      );
+    } catch (err) {
+      if (mime === "image/jpeg") throw err;
+      return canvas.convertToBlob({ type: "image/jpeg", quality: q });
+    }
+  } finally {
+    bitmap.close?.();
+  }
+}
+
+async function renderActiveMode(blob, photo, options = {}) {
+  const tpl = onScreenTemplate();
+  if (!tpl) return blob;
+  if (loadUiMode() === "border") {
+    const refW = Number(photo?.width) || undefined;
+    const refH = Number(photo?.height) || undefined;
+    return applyBorder(blob, tpl, {
+      ...options,
+      referenceWidth: options.referenceWidth ?? refW,
+      referenceHeight: options.referenceHeight ?? refH,
+    });
+  }
+  return renderPrintMat(blob, tpl, photo, options);
 }
 
 // ── EXIF text ─────────────────────────────────────────────────────────────────
@@ -1057,6 +1328,9 @@ function exportNeedsPixelProcessor(context) {
 }
 
 function onScreenTemplate() {
+  if (loadUiMode() === "border") {
+    return resolveBorderExportTemplate(loadBorderTemplates()) || null;
+  }
   return resolveExportTemplate(loadTemplates()) || null;
 }
 
@@ -1068,7 +1342,7 @@ async function applyMatFrameToBlob(blob, photo, _settings, context) {
   // TIFF / 16-bit PNG already framed in processPixels — don't frame again.
   if (exportNeedsPixelProcessor(context)) return blob;
   try {
-    return await renderPrintMat(blob, tpl, photo, {
+    return await renderActiveMode(blob, photo, {
       mimeType: format,
       quality: context?.settings?.quality,
     });
@@ -1091,7 +1365,7 @@ async function applyMatFrameToPixels(frame, photo, _settings, context) {
     srcCanvas.getContext("2d").putImageData(new ImageData(rgba8, width, height), 0, 0);
     // PNG intermediate keeps edges clean before framing.
     const srcBlob = await srcCanvas.convertToBlob({ type: "image/png" });
-    const framedBlob = await renderPrintMat(srcBlob, tpl, photo, { mimeType: "image/png" });
+    const framedBlob = await renderActiveMode(srcBlob, photo, { mimeType: "image/png" });
     const framedBmp = await createImageBitmap(framedBlob);
     const outCanvas = new OffscreenCanvas(framedBmp.width, framedBmp.height);
     outCanvas.getContext("2d").drawImage(framedBmp, 0, 0);
@@ -1120,7 +1394,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.0.1", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.1.0-dev", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1260,7 +1534,337 @@ export function activate(api) {
     );
   }
 
+  function ModeSwitcher({ mode, onChange }) {
+    return ce("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
+      ce("button", {
+        style: mode === "framing" ? S.btnAccent : S.btn,
+        onClick: () => onChange("framing"),
+      }, "Framing"),
+      ce("button", {
+        style: mode === "border" ? S.btnAccent : S.btn,
+        onClick: () => onChange("border"),
+      }, "Border"),
+    );
+  }
+
+  function BorderSettingsPanel() {
+    const [templates, setTemplates] = useState(loadBorderTemplates);
+    const [activeIdx, setActiveIdx] = useState(() => {
+      const list = loadBorderTemplates();
+      const id = loadBorderActiveTemplateId();
+      const idx = id ? list.findIndex(t => String(t.id) === String(id)) : 0;
+      return idx >= 0 ? idx : 0;
+    });
+    const [newName, setNewName] = useState("");
+    const [showNew, setShowNew] = useState(false);
+    const [activePhoto, setActivePhoto] = useState(null);
+    const [previewing, setPreviewing] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const [developParams, setDevelopParams] = useState(null);
+    const [activeModule, setActiveModule] = useState("library");
+
+    const t = templates[activeIdx] || templates[0];
+
+    useEffect(() => {
+      if (t?.id) saveBorderActiveTemplateId(t.id);
+    }, [t?.id]);
+
+    useEffect(() => {
+      const store = stores.useCatalogStore;
+      const sync = state => {
+        const id = state.activePhotoId;
+        setActivePhoto(id ? state.photos.find(p => p.id === id) : null);
+      };
+      const unsub = store.subscribe(sync);
+      sync(store.getState());
+      return unsub;
+    }, []);
+
+    useEffect(() => {
+      const devStore = stores.useDevelopStore;
+      const uiStore = stores.useUIStore;
+      if (!devStore || !uiStore) return;
+      const sync = () => {
+        setDevelopParams(devStore.getState().params || null);
+        setActiveModule(uiStore.getState().activeModule || "library");
+      };
+      const u1 = devStore.subscribe(sync);
+      const u2 = uiStore.subscribe(sync);
+      sync();
+      return () => { u1(); u2(); };
+    }, []);
+
+    const update = (key, value) => {
+      setTemplates(prev => {
+        let next = prev.map((x, i) => {
+          if (i !== activeIdx) return x;
+          let n = { ...x, [key]: value };
+          if (key === "linked" && value) {
+            const v = clampPx(n.top);
+            n = { ...n, top: v, right: v, bottom: v, left: v };
+          }
+          if (n.linked && ["top", "right", "bottom", "left"].includes(key)) {
+            const v = clampPx(value);
+            n = { ...n, top: v, right: v, bottom: v, left: v };
+          }
+          if (["top", "right", "bottom", "left"].includes(key)) {
+            n[key] = clampPx(n[key]);
+          }
+          return normalizeBorderTemplate(n);
+        });
+        saveBorderTemplates(next);
+        return next;
+      });
+    };
+
+    const addTemplate = (name) => {
+      if (!name || !name.trim()) return;
+      setShowNew(false); setNewName("");
+      setTemplates(prev => {
+        const def = loadBorderUserDefaults();
+        const base = def
+          ? normalizeBorderTemplate({ ...def, id: Date.now().toString(), name: name.trim() })
+          : normalizeBorderTemplate({ ...freshBorderTemplate(), id: Date.now().toString(), name: name.trim() });
+        const next = [...prev, base];
+        saveBorderTemplates(next);
+        setActiveIdx(next.length - 1);
+        return next;
+      });
+    };
+
+    const deleteTemplate = () => {
+      if (templates.length <= 1) return;
+      setTemplates(prev => {
+        const next = prev.filter((_, i) => i !== activeIdx);
+        saveBorderTemplates(next);
+        setActiveIdx(Math.max(0, activeIdx - 1));
+        return next;
+      });
+    };
+
+    const importFromBorder = () => {
+      const result = importBorderTemplates("merge");
+      if (result.reason === "none" || result.imported === 0) {
+        window.alert("No Border extension templates found in this browser profile.");
+        return;
+      }
+      const list = loadBorderTemplates();
+      setTemplates(list);
+      const id = loadBorderActiveTemplateId();
+      const idx = id ? list.findIndex(t => String(t.id) === String(id)) : 0;
+      setActiveIdx(idx >= 0 ? idx : 0);
+      window.alert(`Imported ${result.imported} template${result.imported === 1 ? "" : "s"} from Border.`);
+    };
+
+    const saveAsDefaults = () => { saveBorderUserDefaults(t); };
+    const resetToDefaults = () => {
+      const def = loadBorderUserDefaults();
+      const base = def || freshBorderTemplate();
+      setTemplates(prev => {
+        const next = prev.map((x, i) => i === activeIdx
+          ? normalizeBorderTemplate({ ...base, id: x.id, name: x.name })
+          : x);
+        saveBorderTemplates(next);
+        return next;
+      });
+    };
+
+    useEffect(() => {
+      return api.registerExportProcessor({
+        id: "safelight-mat-frame.processor",
+        label: "Mat/Frame",
+        settings: [],
+        ...matFrameProcessorHandlers(),
+      });
+    }, [templates]);
+
+    const buildPreviewBlob = useCallback(async () => {
+      if (activeModule === "develop" && developParams && api.develop?.captureFrame) {
+        const bitmap = await api.develop.captureFrame(developParams);
+        const maxCap = 1400;
+        let tw = bitmap.width, th = bitmap.height;
+        if (Math.max(tw, th) > maxCap) {
+          const s = maxCap / Math.max(tw, th);
+          tw = Math.round(tw * s); th = Math.round(th * s);
+        }
+        const cv = new OffscreenCanvas(tw, th);
+        cv.getContext("2d").drawImage(bitmap, 0, 0, tw, th);
+        bitmap.close?.();
+        return { blob: await cv.convertToBlob({ type: "image/jpeg", quality: 0.85 }), refW: activePhoto?.width, refH: activePhoto?.height };
+      }
+      if (activePhoto?.thumbnailUrl) {
+        const resp = await fetch(activePhoto.thumbnailUrl);
+        return { blob: await resp.blob(), refW: activePhoto?.width, refH: activePhoto?.height };
+      }
+      const canvas = new OffscreenCanvas(800, 533);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#4a5568";
+      ctx.fillRect(0, 0, 800, 533);
+      ctx.fillStyle = "#cbd5e0";
+      ctx.font = "24px sans-serif";
+      ctx.fillText("Sample photo", 320, 270);
+      return { blob: await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 }), refW: 800, refH: 533 };
+    }, [activeModule, developParams, activePhoto]);
+
+    const previewGenRef = useRef(0);
+    const generatePreview = useCallback(async () => {
+      const gen = ++previewGenRef.current;
+      setPreviewing(true);
+      try {
+        const { blob, refW, refH } = await buildPreviewBlob();
+        if (gen !== previewGenRef.current) return;
+        const resultBlob = await applyBorder(blob, t, {
+          maxLongEdge: 1400, preview: true, ignoreEnabled: true,
+          referenceWidth: refW, referenceHeight: refH,
+        });
+        if (gen !== previewGenRef.current) return;
+        setPreviewUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(resultBlob);
+        });
+      } catch (err) {
+        if (gen === previewGenRef.current) console.error("[safelight-mat-frame] border preview error:", err);
+      } finally {
+        if (gen === previewGenRef.current) setPreviewing(false);
+      }
+    }, [t, buildPreviewBlob]);
+
+    const liveTimerRef = useRef(null);
+    useEffect(() => {
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = setTimeout(() => { generatePreview(); }, 450);
+      return () => clearTimeout(liveTimerRef.current);
+      // eslint-disable-next-line
+    }, [t]);
+
+    useEffect(() => {
+      if (activeModule !== "develop" || !developParams || !api.develop?.captureFrame) return;
+      if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = setTimeout(() => { generatePreview(); }, 550);
+      return () => clearTimeout(liveTimerRef.current);
+      // eslint-disable-next-line
+    }, [developParams, activeModule]);
+
+    const sideInput = (label, key) => ce("div", { style: S.row },
+      ce("label", { style: S.label }, label),
+      ce("input", {
+        style: { ...S.input, opacity: t.linked && key !== "top" ? 0.5 : 1 },
+        type: "number", min: 0, max: 500, step: 1,
+        value: t[key],
+        disabled: t.linked && key !== "top",
+        onChange: e => update(key, e.target.value),
+      })
+    );
+
+    return ce(React.Fragment, null,
+      ce("div", { style: S.sectionTitle }, "Templates"),
+      ce("div", { style: { marginBottom: 6 } },
+        ...templates.map((tp, i) =>
+          ce("span", {
+            key: tp.id, style: i === activeIdx ? S.tagActive : S.tag,
+            onClick: () => setActiveIdx(i),
+            onDoubleClick: () => { setActiveIdx(i); setNewName(tp.name); setShowNew("rename"); },
+            title: "Click to select · Double-click to rename",
+          }, tp.name)
+        )
+      ),
+      showNew === "rename" || showNew === true
+        ? ce("div", { style: { display: "flex", gap: 6, marginBottom: 10, alignItems: "center" } },
+            ce("input", {
+              style: { ...S.inputText, width: 120 }, type: "text",
+              placeholder: showNew === true ? "Template name…" : "Rename…",
+              value: newName, autoFocus: true,
+              onChange: e => setNewName(e.target.value),
+              onKeyDown: e => {
+                if (e.key === "Enter") {
+                  if (showNew === true) addTemplate(newName);
+                  else {
+                    setTemplates(prev => {
+                      const next = prev.map((x, i) => i === activeIdx ? { ...x, name: newName.trim() } : x);
+                      saveBorderTemplates(next); return next;
+                    });
+                    setShowNew(false); setNewName("");
+                  }
+                }
+                if (e.key === "Escape") { setShowNew(false); setNewName(""); }
+              },
+            }),
+            ce("button", { style: S.btnAccent, onClick: () => {
+              if (showNew === true) addTemplate(newName);
+              else {
+                setTemplates(prev => {
+                  const next = prev.map((x, i) => i === activeIdx ? { ...x, name: newName.trim() } : x);
+                  saveBorderTemplates(next); return next;
+                });
+                setShowNew(false); setNewName("");
+              }
+            }}, "Save"),
+            ce("button", { style: S.btn, onClick: () => { setShowNew(false); setNewName(""); } }, "Cancel"),
+          )
+        : ce("div", { style: { display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" } },
+            ce("button", { style: S.btn, onClick: () => { setNewName(`Border ${templates.length + 1}`); setShowNew(true); } }, "+ New"),
+            ce("button", { style: S.btnDanger, onClick: deleteTemplate }, "Delete"),
+            ce("button", {
+              style: S.btn,
+              title: "Copy templates saved by the Border extension",
+              onClick: importFromBorder,
+            }, "Import Border"),
+          ),
+
+      ce("hr", { style: S.divider }),
+      ce("div", { style: { ...S.label, fontSize: 10, marginBottom: 8, lineHeight: 1.4 } },
+        "Solid border outside the photo (px). Nothing is cropped. Export only while this module is open."),
+
+      ce("div", { style: S.row },
+        ce("label", { style: S.label }, "Color"),
+        ce("input", { style: S.colorInput, type: "color", value: cssColor(t.color), onChange: e => update("color", e.target.value) }),
+      ),
+      ce("div", { style: S.row },
+        ce("label", { style: { ...S.label, cursor: "pointer", display: "flex", alignItems: "center" } },
+          ce("input", { type: "checkbox", style: S.checkbox, checked: t.linked !== false, onChange: e => update("linked", e.target.checked) }),
+          "Link sides"
+        )
+      ),
+      ce("div", { style: S.sectionTitle }, "Width (px)"),
+      sideInput("Top", "top"),
+      sideInput("Right", "right"),
+      sideInput("Bottom", "bottom"),
+      sideInput("Left", "left"),
+
+      ce("div", { style: S.defaultsRow },
+        ce("button", { style: S.btn, onClick: resetToDefaults }, "↺ Reset to Defaults"),
+        ce("button", { style: S.btn, onClick: saveAsDefaults }, "💾 Save as Defaults"),
+      ),
+
+      ce("hr", { style: S.divider }),
+      ce("div", { style: S.sectionTitle }, "Preview"),
+      previewUrl
+        ? ce("div", { style: { ...S.preview, padding: 4 } },
+            ce("img", { src: previewUrl, style: { maxWidth: "100%", maxHeight: 240, borderRadius: 2 } })
+          )
+        : ce("div", { style: S.preview }, "Click \"Generate Preview\" to see the result"),
+      ce("button", {
+        style: { ...S.previewBtn, opacity: previewing ? 0.6 : 1, cursor: previewing ? "wait" : "pointer",
+                display: "flex", alignItems: "center", gap: 6, justifyContent: "center" },
+        onClick: generatePreview, disabled: previewing,
+      }, previewing ? null : Icon("image"), previewing ? "Generating…" : "Generate Preview"),
+      ce("div", { style: { color: "var(--color-text-secondary)", fontSize: 10, marginTop: 6, textAlign: "center" } },
+        `Adds ${t.top}/${t.right}/${t.bottom}/${t.left} px (T/R/B/L) — original is not cropped`),
+    );
+  }
+
   function MatFramePanel() {
+    const [uiMode, setUiMode] = useState(() => loadUiMode());
+    const switchMode = (m) => { saveUiMode(m); setUiMode(m); };
+    return ce("div", { style: S.container },
+      ce(ModeSwitcher, { mode: uiMode, onChange: switchMode }),
+      uiMode === "border"
+        ? ce(BorderSettingsPanel, { key: "border" })
+        : ce(FramingSettingsPanel, { key: "framing" }),
+    );
+  }
+
+  function FramingSettingsPanel() {
     const [templates, setTemplates] = useState(loadTemplates);
     const [activeIdx, setActiveIdx] = useState(() => {
       const list = loadTemplates();
@@ -1533,7 +2137,7 @@ export function activate(api) {
       { id: "text",    label: "Text" },
     ];
 
-    return ce("div", { style: S.container },
+    return ce(React.Fragment, null,
 
       ce("div", { style: S.sectionTitle }, "Templates"),
       ce("div", { style: { marginBottom: 6 } },
@@ -2086,8 +2690,8 @@ export function activate(api) {
     const safePage = Math.min(pageIndex, pageCount - 1);
     const photo = photos[safePage] || null;
 
-    const [tpl, setTpl] = useState(() => resolveExportTemplate(loadTemplates()));
-    const [tplSig, setTplSig] = useState(() => JSON.stringify(resolveExportTemplate(loadTemplates()) || {}));
+    const [tpl, setTpl] = useState(() => onScreenTemplate());
+    const [tplSig, setTplSig] = useState(() => JSON.stringify({ mode: loadUiMode(), tpl: onScreenTemplate() || {} }));
     const [url, setUrl] = useState(null);
     const [busy, setBusy] = useState(false);
     const [sourceHint, setSourceHint] = useState("");
@@ -2105,8 +2709,8 @@ export function activate(api) {
 
     useEffect(() => {
       const id = setInterval(() => {
-        const next = resolveExportTemplate(loadTemplates());
-        const sig = JSON.stringify(next || {});
+        const next = onScreenTemplate();
+        const sig = JSON.stringify({ mode: loadUiMode(), tpl: next || {} });
         setTpl(prev => (prev === next || JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
         setTplSig(prev => (prev === sig ? prev : sig));
       }, 750);
@@ -2159,9 +2763,11 @@ export function activate(api) {
           if (blob) hint = "Develop pipeline (no processors)";
         }
         if (!blob) throw new Error("No source pixels for preview");
-        const framed = await renderPrintMat(blob, template, targetPhoto, {
+        const framed = await renderActiveMode(blob, targetPhoto, {
           maxLongEdge: PREVIEW_EDGE,
           preview: true,
+          referenceWidth: targetPhoto?.width,
+          referenceHeight: targetPhoto?.height,
         });
         const url = URL.createObjectURL(framed);
         const entry = { url, hint };

@@ -1,11 +1,11 @@
 {
   "id": "safelight-mat-frame",
   "name": "Mat/Frame",
-  "version": "2.0.1",
-  "description": "Mat/Frame module — export uses the on-screen template only while this module is open. Import Print Mat templates. Multi-select, Filmstrip, JPEG/PNG/WebP/TIFF.",
+  "version": "2.1.0-dev",
+  "description": "DEV — Framing · Border modes. Export uses the on-screen template only while this module is open. Not an official release.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
   "minAppVersion": "2.6.0",
   "categories": ["Export"],
-  "keywords": ["mat", "frame", "passe-partout", "print", "module"]
+  "keywords": ["mat", "frame", "border", "passe-partout", "print", "module"]
 }

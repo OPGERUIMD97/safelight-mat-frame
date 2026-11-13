@@ -18,12 +18,25 @@ Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discu
 
 Print Mat is discontinued — deactivate and uninstall it after switching here.
 
+## Dev build (local test)
+
+Branch `mat-frame-2.1.0-border` ships **2.1.0-dev** (Framing · Border). There is **no GitHub Release** for this yet — SafeLight will not offer it as an official update.
+
+To test: Safelight → **View → Extensions** → load this folder:
+
+```
+/Users/ronaldhoogland/workspaces_cursor.nosync/safelight-mat-frame
+```
+
+(or your clone path). Prefer the local folder over the GitHub install while testing.
+
 ## Features
 
 - Top-level **Mat/Frame** tab, Library toolbar button, **Ctrl+Shift+M**
+- Modes: **Framing** (mat/frame toolkit) · **Border** (solid px border)
 - Presets, canvas stage, crop, No mat / No frame, matte bevel, frame colors, shadows, textures, EXIF captions
 - Named templates + save/reset defaults
-- **Import Print Mat** — auto-import on first run if Mat/Frame is empty; button to merge later
+- **Import Print Mat** / **Import Border** — migrate templates from the old extensions
 - Large module preview — **one framed photo per selected image** (‹ › pages, like Print)
 - Default layout docks **Export** (right) and **Filmstrip** (bottom) with Mat/Frame settings
 - **Export while Mat/Frame is open** → uses the template on screen (no separate Apply/Template controls)
