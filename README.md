@@ -16,6 +16,8 @@ Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discu
 | [Print Mat](https://github.com/OPGERUIMD97/safelight-print-mat) | Discontinued — deactivate & uninstall |
 | [Border](https://github.com/OPGERUIMD97/safelight-border) | Discontinued — deactivate & uninstall |
 
+From Safelight 3.2.6, installing or updating Framing / Border turns Print Mat and Border off automatically (the top bar says so). They stay installed with their settings; turn one back on in **View → Extensions** if you really need it, or uninstall it.
+
 Use **Import Print Mat** / **Import Border** in this module to migrate templates.
 
 ## Features
@@ -39,6 +41,14 @@ Safelight 2.6.0 or newer is required.
 1. Open **Framing / Border**
 2. Pick **Framing** or **Border**, select a template, tweak settings
 3. Export (or print) **from this module**
+
+## Changelog
+
+### 2.1.1
+- Turns off the discontinued Print Mat and Border extensions automatically (`supersedes`, Safelight 3.2.6+), so you no longer end up with two sets of border settings.
+
+### 2.1.0
+- Framing / Border modes; Border mode (solid px) replaces the Border extension; Import Border.
 
 ## License
 

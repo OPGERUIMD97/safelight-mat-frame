@@ -1,4 +1,4 @@
-// Safelight Framing / Border Module v2.1.0
+// Safelight Framing / Border Module v2.1.1
 // Top-level Framing / Border tab (registerModule) — export-first framing + solid border.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
@@ -1425,7 +1425,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.1.0", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.1.1", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
