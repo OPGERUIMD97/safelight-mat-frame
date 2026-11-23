@@ -1,4 +1,4 @@
-// Safelight Framing / Border Module v2.1.1
+// Safelight Framing / Border Module v2.2.0
 // Top-level Framing / Border tab (registerModule) — export-first framing + solid border.
 // Architecture mirrors safelight-print: module + settings panel + export processor.
 // No Develop-canvas overlay (avoids fighting SafeLight zoom/pan).
@@ -11,6 +11,8 @@
 // Default layout docks Export + Filmstrip.
 // Canvas, crop, No mat / No frame, bevel, shadows, textures, EXIF captions, templates.
 // Modes: Framing (mat/frame toolkit) · Border (solid px border, from safelight-border).
+// When the Border extension (safelight-border 2.x) is active, Border mode steps
+// aside: borders are then made per photo in Develop by that extension.
 
 const STORAGE_KEY  = "safelight-mat-frame-templates";
 const DEFAULTS_KEY = "safelight-mat-frame-user-defaults";
@@ -489,7 +491,18 @@ function resolveExportTemplate(templates) {
 }
 
 // ── UI mode (Framing · Border) ────────────────────────────────────────────────
+// The Border extension's geometry stage; its params list only while it runs.
+const BORDER_EXT_STAGE = "safelight-border.fit";
+function borderExtensionActive() {
+  try {
+    const list = hostApi?.params?.list?.();
+    return Array.isArray(list) && list.some(d => d && d.stageId === BORDER_EXT_STAGE);
+  } catch (e) {
+    return false;
+  }
+}
 function loadUiMode() {
+  if (borderExtensionActive()) return "framing";
   try {
     const m = localStorage.getItem(UI_MODE_KEY);
     if (m === "border" || m === "framing") return m;
@@ -1425,7 +1438,7 @@ function matFrameProcessorHandlers() {
 // ── Activation ─────────────────────────────────────────────────────────────────
 export function activate(api) {
   hostApi = api;
-  console.log("%c[safelight-mat-frame] module loaded — v2.1.1", "color:#C15F3C;font-weight:bold");
+  console.log("%c[safelight-mat-frame] module loaded — v2.2.0", "color:#C15F3C;font-weight:bold");
   const { react: React, stores } = api;
   const { useState, useEffect, useCallback, useRef } = React;
   const ce = (type, props, ...ch) => React.createElement(type, props, ...ch);
@@ -1566,6 +1579,11 @@ export function activate(api) {
   }
 
   function ModeSwitcher({ mode, onChange }) {
+    if (borderExtensionActive()) {
+      return ce("div", {
+        style: { fontSize: 11, color: "var(--color-text-muted)", lineHeight: 1.4, marginBottom: 12 },
+      }, "Borders are handled by the Border extension (Develop ▸ Border). This module does mats and frames.");
+    }
     return ce("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
       ce("button", {
         style: mode === "framing" ? S.btnAccent : S.btn,
@@ -1889,7 +1907,7 @@ export function activate(api) {
     const switchMode = (m) => { saveUiMode(m); setUiMode(m); };
     return ce("div", { style: S.container },
       ce(ModeSwitcher, { mode: uiMode, onChange: switchMode }),
-      uiMode === "border"
+      uiMode === "border" && !borderExtensionActive()
         ? ce(BorderSettingsPanel, { key: "border" })
         : ce(FramingSettingsPanel, { key: "framing" }),
     );
