@@ -1475,7 +1475,7 @@ export function activate(api) {
       return api.registerExportProcessor({
         id: "safelight-mat-frame.processor",
         label: "Framing",
-        // Show on-screen Framing:… or Border:… — no Apply toggle.
+        // Show the on-screen Framing template — no Apply toggle.
         settings: getExportStatusFields(),
         ...matFrameProcessorHandlers(),
       });

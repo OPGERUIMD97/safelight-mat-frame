@@ -30,6 +30,9 @@ Formats: JPEG, PNG, WebP and TIFF. Filmstrip and Export are docked by default.
 
 ## Changelog
 
+### 3.0.1
+- Release zip is now built automatically, so Safelight can install the release directly.
+
 ### 3.0.0
 - Mats and frames only: the Border mode is gone. Borders per photo are the separate [Border](https://github.com/OPGERUIMD97/safelight-border) extension again, with its own templates.
 - Renamed to **Framing**.

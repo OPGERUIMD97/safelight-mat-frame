@@ -1,7 +1,7 @@
 {
   "id": "safelight-mat-frame",
   "name": "Framing",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Framing module — passe-partout, frames, canvas, shadows, textures and captions for export and print. Export uses the on-screen template only while this module is open. Replaces Print Mat.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
