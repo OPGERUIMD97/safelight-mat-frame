@@ -1,61 +1,47 @@
-# Safelight Framing / Border
+# Framing
 
-A **Framing / Border** module for [Safelight](https://github.com/anthonyreimche/SafeLight) (v2.6+). Top-level tab (like [Print](https://github.com/OPGERUIMD97/safelight-print)) with two modes:
+A **Framing** module for [Safelight](https://github.com/anthonyreimche/SafeLight): passe-partout, frames, canvas, crop, shadows, textures and EXIF captions. A top-level tab (like [Print](https://github.com/OPGERUIMD97/safelight-print)).
 
-- **Framing** — passe-partout, frame, canvas, crop, shadows, textures, EXIF captions  
-- **Border** — solid-color border in pixels around the photo (nothing cropped)
+Export and print use the **on-screen** template only while this module is open. Export from Library or Develop leaves photos unchanged.
 
-**Border or Framing / Border?** For a simple border per photo in Develop, use the separate [Border](https://github.com/OPGERUIMD97/safelight-border) extension. Once it is active, this module's Border mode steps aside and the module is for mats, frames and print.
+For a simple border per photo in Develop, use the separate [Border](https://github.com/OPGERUIMD97/safelight-border) extension.
 
-Export/print uses the **on-screen** template only while this module is open. Export from Library/Develop leaves photos unchanged.
+## Install
 
-Requires the [module registry](https://github.com/anthonyreimche/SafeLight/discussions/142) (`registerModule`).
-
-## Replaces
-
-| Old extension | Status |
-|---|---|
-| [Print Mat](https://github.com/OPGERUIMD97/safelight-print-mat) | Discontinued — deactivate & uninstall |
-
-From Safelight 3.2.6, installing or updating Framing / Border turns Print Mat off automatically (the top bar says so). Use **Import Print Mat** in this module to migrate templates.
-
-## Works with Border
-
-[Border](https://github.com/OPGERUIMD97/safelight-border) 2.x is a separate extension again: a border per photo in Develop, visible everywhere. While it is active, the **Border** mode here is hidden and the module shows a note instead. Turn Border off and the mode, with your Border templates, is back.
-
-## Features
-
-- Top-level **Framing / Border** tab, Library toolbar button, **Ctrl+Shift+M**
-- Modes: **Framing** · **Border**
-- Multi-select pages (‹ › / ← →), Filmstrip + Export docked by default
-- Export panel shows the active choice, e.g. `Framing: Classic Mat` or `Border: White subtle`
-- Formats: **JPEG, PNG, WebP, TIFF**
-
-## Installation
+In Safelight, go to **View ▸ Extensions** and enter:
 
 ```
 OPGERUIMD97/safelight-mat-frame
 ```
 
-Safelight 2.6.0 or newer is required.
+Requires the module registry (`registerModule`).
 
 ## Usage
 
-1. Open **Framing / Border**
-2. Pick **Framing** or **Border**, select a template, tweak settings
-3. Export (or print) **from this module**
+1. Open **Framing** (tab, Library toolbar button or **Ctrl+Shift+M**).
+2. Select one or more photos and pick a template; page through a selection with ‹ › or ← →.
+3. Export or print **from this module**. The Export panel shows the active template, e.g. `Framing: Classic Mat`.
+
+Formats: JPEG, PNG, WebP and TIFF. Filmstrip and Export are docked by default.
+
+## Replaces
+
+[Print Mat](https://github.com/OPGERUIMD97/safelight-print-mat) is discontinued. From Safelight 3.2.6, installing Framing turns it off automatically; use **Import Print Mat** to bring your templates over.
 
 ## Changelog
 
+### 3.0.0
+- Mats and frames only: the Border mode is gone. Borders per photo are the separate [Border](https://github.com/OPGERUIMD97/safelight-border) extension again, with its own templates.
+- Renamed to **Framing**.
+
 ### 2.2.0
-- Border is a separate extension again: no longer turned off by this module (`supersedes` now lists only Print Mat).
-- Border mode hides itself while the Border extension is active.
+- No longer turns the Border extension off.
 
 ### 2.1.1
-- Turns off the discontinued Print Mat and Border extensions automatically (`supersedes`, Safelight 3.2.6+), so you no longer end up with two sets of border settings.
+- Turns off the discontinued Print Mat and Border extensions automatically (`supersedes`, Safelight 3.2.6+).
 
 ### 2.1.0
-- Framing / Border modes; Border mode (solid px) replaces the Border extension; Import Border.
+- Framing / Border modes; Import Border.
 
 ## License
 

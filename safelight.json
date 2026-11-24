@@ -1,13 +1,26 @@
 {
   "id": "safelight-mat-frame",
-  "name": "Framing / Border",
-  "version": "2.2.0",
-  "description": "Framing · Border module — mat/frame toolkit and solid px border. Export uses the on-screen template only while this module is open. Replaces Print Mat and Border extensions.",
+  "name": "Framing",
+  "version": "3.0.0",
+  "description": "Framing module — passe-partout, frames, canvas, shadows, textures and captions for export and print. Export uses the on-screen template only while this module is open. Replaces Print Mat.",
   "author": "OPGERUIMD97",
   "main": "dist/index.js",
   "minAppVersion": "2.6.0",
-  "categories": ["Export"],
-  "keywords": ["mat", "frame", "border", "passe-partout", "print", "module", "framing"],
-  "worksWith": ["OPGERUIMD97/safelight-print"],
-  "supersedes": ["safelight-print-mat"]
+  "categories": [
+    "Export"
+  ],
+  "keywords": [
+    "mat",
+    "frame",
+    "passe-partout",
+    "print",
+    "module",
+    "framing"
+  ],
+  "worksWith": [
+    "OPGERUIMD97/safelight-print"
+  ],
+  "supersedes": [
+    "safelight-print-mat"
+  ]
 }
